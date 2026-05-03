@@ -160,7 +160,7 @@ fun ControllerDetailScreen(
                         )
                         is ControllerDetailEntry.Chevron -> PillRowKeyValue(
                             label = entry.label,
-                            value = "›",
+                            value = "",
                             isSelected = isSelected,
                             fontSize = listFontSize,
                             lineHeight = listLineHeight,
