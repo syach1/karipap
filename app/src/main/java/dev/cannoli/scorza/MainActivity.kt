@@ -146,7 +146,6 @@ class MainActivity : ComponentActivity(), ActivityActions {
         dev.cannoli.scorza.util.InputLog.write("BLUETOOTH_CONNECT permission ${if (granted) "granted" else "denied"}")
         if (granted && storageDependentStarted) {
             controllerV2Bridge.settleNow()
-            controllersViewModel.refreshFromRouter()
         }
         ensurePermissionsOrRequest()
     }
@@ -241,9 +240,6 @@ class MainActivity : ComponentActivity(), ActivityActions {
                         val navOsdMessage = nav.osdMessage
                         val activeMapping by activeMappingHolder.active.collectAsState()
                         LaunchedEffect(navScreen) {
-                            if (navScreen is LauncherScreen.Controllers) {
-                                controllersViewModel.refreshFromRouter()
-                            }
                         }
                         AppNavGraph(
                             currentScreen = navScreen,
@@ -398,14 +394,12 @@ class MainActivity : ComponentActivity(), ActivityActions {
                 nav.osdMessage = "P${port + 1}: $name"
                 osdHandler.postDelayed(clearOsd, 3000)
             }
-            controllersViewModel.refreshFromRouter()
         }
         controllerV2Bridge.onDeviceRemoved = { departed ->
             osdHandler.removeCallbacks(clearOsd)
             val portLabel = departed.port?.let { "P${it + 1}: " } ?: ""
             nav.osdMessage = "$portLabel${departed.displayName} disconnected"
             osdHandler.postDelayed(clearOsd, 3000)
-            controllersViewModel.refreshFromRouter()
         }
     }
 

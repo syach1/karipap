@@ -816,7 +816,6 @@ fun AppNavGraph(
                                     if (cs is LauncherScreen.EditButtons) {
                                         nav.replaceTop(cs.copy(listeningCanonical = null, countdownMs = 0))
                                     }
-                                    if (finalized != null) controllersViewModel.refreshFromRouter()
                                     break
                                 }
                                 val cs = nav.currentScreen

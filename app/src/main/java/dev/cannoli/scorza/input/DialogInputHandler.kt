@@ -1180,11 +1180,7 @@ class DialogInputHandler @Inject constructor(
             val mapping = vm.state.value.connected.firstOrNull { it.mapping.id == mappingId }?.mapping
                 ?: vm.state.value.savedMappings.firstOrNull { it.id == mappingId }
             if (mapping != null && newName.isNotEmpty() && newName != mapping.displayName) {
-                val updated = vm.renameMapping(mapping, newName)
-                val connected = vm.state.value.connected.map { row ->
-                    if (row.mapping.id == updated.id) row.copy(mapping = updated) else row
-                }
-                vm.refresh(connected)
+                vm.renameMapping(mapping, newName)
             }
             nav.dialogState.value = DialogState.None
             return

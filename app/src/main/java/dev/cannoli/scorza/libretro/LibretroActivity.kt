@@ -1347,7 +1347,6 @@ class LibretroActivity : ComponentActivity() {
                 push(IGMScreen.Settings())
             }
             menu.reassignIndex -> {
-                controllersViewModel.refreshFromRouter()
                 push(IGMScreen.ReassignPlayers())
             }
             menu.resetIndex -> {
@@ -1409,7 +1408,6 @@ class LibretroActivity : ComponentActivity() {
                         push(IGMScreen.Emulator())
                     }
                     IGMSettings.CONTROLLERS -> {
-                        controllersViewModel.refreshFromRouter()
                         push(IGMScreen.Controllers())
                     }
                     IGMSettings.SHORTCUTS -> push(IGMScreen.Shortcuts())
@@ -2514,7 +2512,6 @@ class LibretroActivity : ComponentActivity() {
                             portPressedKeys[to].clear()
                             runner.setInput(from, 0)
                             runner.setInput(to, 0)
-                            controllersViewModel.refreshFromRouter()
                         }
                     }
                     replaceTop(screen.copy(swapWithIndex = -1))
@@ -2580,17 +2577,17 @@ class LibretroActivity : ComponentActivity() {
             }
             "btn_left" -> {
                 if (mapping != null) when (screen.selectedIndex) {
-                    1 -> applyDetailAndRefresh { controllersViewModel.cycleConfirmButton(mapping) }
-                    2 -> applyDetailAndRefresh { controllersViewModel.cycleGlyphStyle(mapping, -1) }
-                    3 -> applyDetailAndRefresh { controllersViewModel.toggleExclude(mapping) }
+                    1 -> controllersViewModel.cycleConfirmButton(mapping)
+                    2 -> controllersViewModel.cycleGlyphStyle(mapping, -1)
+                    3 -> controllersViewModel.toggleExclude(mapping)
                 }
                 true
             }
             "btn_right" -> {
                 if (mapping != null) when (screen.selectedIndex) {
-                    1 -> applyDetailAndRefresh { controllersViewModel.cycleConfirmButton(mapping) }
-                    2 -> applyDetailAndRefresh { controllersViewModel.cycleGlyphStyle(mapping, 1) }
-                    3 -> applyDetailAndRefresh { controllersViewModel.toggleExclude(mapping) }
+                    1 -> controllersViewModel.cycleConfirmButton(mapping)
+                    2 -> controllersViewModel.cycleGlyphStyle(mapping, 1)
+                    3 -> controllersViewModel.toggleExclude(mapping)
                 }
                 true
             }
@@ -2610,13 +2607,6 @@ class LibretroActivity : ComponentActivity() {
         }
     }
 
-    private inline fun applyDetailAndRefresh(block: () -> dev.cannoli.scorza.input.v2.DeviceMapping) {
-        val updated = block()
-        val connected = controllersViewModel.state.value.connected.map { row ->
-            if (row.mapping.id == updated.id) row.copy(mapping = updated) else row
-        }
-        controllersViewModel.refresh(connected)
-    }
 
     private fun handleEditButtonsInput(screen: IGMScreen.EditButtons, keyCode: Int, button: String?): Boolean {
         if (editButtonsController.isListening) return true

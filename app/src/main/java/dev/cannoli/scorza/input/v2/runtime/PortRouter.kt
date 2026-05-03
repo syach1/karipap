@@ -24,6 +24,9 @@ class PortRouter(private val maxPorts: Int = 4) {
     private val _routes = MutableStateFlow<Map<Int, Int>>(emptyMap())
     val routes: StateFlow<Map<Int, Int>> = _routes.asStateFlow()
 
+    private val _entrySnapshots = MutableStateFlow<List<Snapshot>>(emptyList())
+    val entrySnapshots: StateFlow<List<Snapshot>> = _entrySnapshots.asStateFlow()
+
     private fun resolveId(deviceId: Int): Int = aliases[deviceId] ?: deviceId
 
     fun onConnect(device: ConnectedDevice, mapping: DeviceMapping) {
@@ -134,6 +137,9 @@ class PortRouter(private val maxPorts: Int = 4) {
         _routes.value = entries.values
             .mapNotNull { it.port?.let { p -> it.device.androidDeviceId to p } }
             .toMap()
+        _entrySnapshots.value = entries.values.map {
+            Snapshot(it.device.androidDeviceId, it.device, it.mapping, it.port)
+        }
     }
 
     fun evaluatorFor(androidDeviceId: Int): PortEvaluator? =

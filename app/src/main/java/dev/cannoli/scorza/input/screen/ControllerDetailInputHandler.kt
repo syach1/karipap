@@ -73,18 +73,10 @@ class ControllerDetailInputHandler @Inject constructor(
         val screen = current() ?: return
         val mapping = resolveMapping(screen) ?: return
         when (screen.selectedIndex) {
-            1 -> applyAndRefresh { viewModel.cycleConfirmButton(mapping) }
-            2 -> applyAndRefresh { viewModel.cycleGlyphStyle(mapping, direction) }
-            3 -> applyAndRefresh { viewModel.toggleExclude(mapping) }
+            1 -> viewModel.cycleConfirmButton(mapping)
+            2 -> viewModel.cycleGlyphStyle(mapping, direction)
+            3 -> viewModel.toggleExclude(mapping)
         }
-    }
-
-    private inline fun applyAndRefresh(block: () -> DeviceMapping) {
-        val updated = block()
-        val connected = viewModel.state.value.connected.map { row ->
-            if (row.mapping.id == updated.id) row.copy(mapping = updated) else row
-        }
-        viewModel.refresh(connected)
     }
 
     companion object {

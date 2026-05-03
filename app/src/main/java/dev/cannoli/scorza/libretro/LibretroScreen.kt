@@ -512,7 +512,6 @@ fun LibretroScreen(
                                 val finalized = editButtonsController.tickAndMaybeFinalize()
                                 if (finalized != null || !editButtonsController.isListening) {
                                     onClearListening()
-                                    if (finalized != null) controllersViewModel?.refreshFromRouter()
                                     break
                                 }
                             }

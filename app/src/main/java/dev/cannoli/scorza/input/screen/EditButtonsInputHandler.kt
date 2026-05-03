@@ -79,6 +79,5 @@ class EditButtonsInputHandler @Inject constructor(
         if (activeMappingHolder.active.value?.id == updated.id) {
             activeMappingHolder.set(updated)
         }
-        controllersViewModel.refreshFromRouter()
     }
 }

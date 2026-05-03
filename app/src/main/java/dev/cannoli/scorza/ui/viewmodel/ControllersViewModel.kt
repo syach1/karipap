@@ -8,9 +8,13 @@ import dev.cannoli.scorza.input.v2.repo.MappingRepository
 import dev.cannoli.scorza.input.v2.resolver.MappingResolver
 import dev.cannoli.scorza.input.v2.runtime.ActiveMappingHolder
 import dev.cannoli.scorza.input.v2.runtime.PortRouter
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.launch
 import javax.inject.Inject
 
 data class ConnectedRow(
@@ -32,10 +36,25 @@ class ControllersViewModel @Inject constructor(
     private val activeMappingHolder: ActiveMappingHolder,
     private val resolver: MappingResolver,
 ) {
+    private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
     private val _state = MutableStateFlow(ControllersUiState())
     val state: StateFlow<ControllersUiState> = _state.asStateFlow()
 
-    fun refresh(connectedRows: List<ConnectedRow>) {
+    init {
+        scope.launch {
+            portRouter.entrySnapshots.collect { snapshots -> recompute(snapshots) }
+        }
+    }
+
+    private fun recompute(snapshots: List<PortRouter.Snapshot>) {
+        val connectedRows = snapshots.map { snap ->
+            ConnectedRow(
+                androidDeviceId = snap.androidDeviceId,
+                mapping = snap.mapping,
+                port = snap.port,
+                isBuiltIn = snap.device.vendorId == 0 && snap.device.productId == 0,
+            )
+        }
         val connectedIds = connectedRows.map { it.mapping.id }.toSet()
         val sortedConnected = connectedRows.sortedWith(
             compareBy<ConnectedRow> { it.port ?: Int.MAX_VALUE }
@@ -47,16 +66,8 @@ class ControllersViewModel @Inject constructor(
         _state.value = ControllersUiState(connected = sortedConnected, savedMappings = saved)
     }
 
-    fun refreshFromRouter() {
-        val rows = portRouter.snapshotEntries().map { snap ->
-            ConnectedRow(
-                androidDeviceId = snap.androidDeviceId,
-                mapping = snap.mapping,
-                port = snap.port,
-                isBuiltIn = snap.device.vendorId == 0 && snap.device.productId == 0,
-            )
-        }
-        refresh(rows)
+    private fun refreshFromCurrentSnapshots() {
+        recompute(portRouter.entrySnapshots.value)
     }
 
     fun cycleConfirmButton(mapping: DeviceMapping): DeviceMapping {
@@ -96,9 +107,10 @@ class ControllersViewModel @Inject constructor(
             if (activeMappingHolder.active.value?.id == mapping.id) {
                 activeMappingHolder.set(fresh)
             }
-            refreshFromRouter()
         } else {
-            refresh(_state.value.connected)
+            // Repository changed but the router didn't publish (device wasn't connected),
+            // so re-derive savedMappings from the current router snapshot.
+            refreshFromCurrentSnapshots()
         }
     }
 
