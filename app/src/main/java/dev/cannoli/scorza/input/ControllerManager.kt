@@ -20,7 +20,6 @@ class ControllerManager(
 
     val slots = arrayOfNulls<ControllerIdentity>(maxPorts)
     val portInputs = Array(maxPorts) { LibretroInput() }
-    val portInputMasks = IntArray(maxPorts)
     val portPressedKeys = Array(maxPorts) { mutableSetOf<Int>() }
 
     private val deviceToPort = mutableMapOf<Int, Int>()
@@ -111,7 +110,6 @@ class ControllerManager(
     fun removeDevice(deviceId: Int): Int? {
         val port = deviceToPort.remove(deviceId) ?: return null
         slots[port] = null
-        portInputMasks[port] = 0
         portPressedKeys[port].clear()
         onDeviceDisconnected?.invoke(port)
         return port
@@ -149,14 +147,12 @@ class ControllerManager(
         for (id in movingFromToPort) deviceToPort[id] = fromPort
 
         for (p in listOf(fromPort, toPort)) {
-            portInputMasks[p] = 0
             portPressedKeys[p].clear()
         }
     }
 
     fun resetAllInput() {
         for (p in 0 until maxPorts) {
-            portInputMasks[p] = 0
             portPressedKeys[p].clear()
         }
     }

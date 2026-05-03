@@ -809,7 +809,6 @@ class LibretroActivity : ComponentActivity() {
 
     private fun pushPortMask(port: Int) {
         val eval = evaluatorForPort(port) ?: run {
-            controllerManager.portInputMasks[port] = 0
             runner.setInput(port, 0)
             return
         }
@@ -817,7 +816,6 @@ class LibretroActivity : ComponentActivity() {
         for (cb in eval.currentlyPressed()) {
             mask = mask or dev.cannoli.scorza.input.v2.runtime.CanonicalRetroMap.maskOf(cb)
         }
-        controllerManager.portInputMasks[port] = mask
         runner.setInput(port, mask)
     }
 
