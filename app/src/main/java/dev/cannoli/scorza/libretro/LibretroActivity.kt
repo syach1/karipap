@@ -51,6 +51,7 @@ import dev.cannoli.ui.theme.LocalCannoliColors
 import androidx.compose.runtime.collectAsState
 import dev.cannoli.scorza.input.v2.runtime.confirmButton
 import dev.cannoli.scorza.input.v2.runtime.labelSet
+import dev.cannoli.ui.components.OsdPosition
 import dev.cannoli.ui.theme.hexToColor
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -624,7 +625,7 @@ class LibretroActivity : ComponentActivity() {
                         cacheDir = java.io.File(cacheDir, "ra_cache"),
                         onEvent = { _, title, _, _ ->
                             raHasAchievements = true
-                            showOsd("\uDB81\uDD38 $title")
+                            showOsd("\uDB81\uDD38 $title", OsdPosition.BottomCenter)
                         },
                         onLogin = { success, nameOrError, newToken ->
                             sessionLog.log("RA onLogin: success=$success name=$nameOrError tokenReceived=${newToken != null}")
@@ -647,10 +648,10 @@ class LibretroActivity : ComponentActivity() {
                                     settings.flush()
                                     sessionLog.log("RA credentials cleared -- user must re-authenticate")
                                 }
-                                showOsd(getString(R.string.ra_login_failed))
+                                showOsd(getString(R.string.ra_login_failed), OsdPosition.TopCenter)
                             }
                         },
-                        onSyncStatus = { msg -> showOsd(msg) },
+                        onSyncStatus = { msg -> showOsd(msg, OsdPosition.TopEnd) },
                         onDetectionReady = { onRaDetectionReady() },
                         logger = { msg -> sessionLog.log(msg) }
                     )
@@ -1113,14 +1114,14 @@ class LibretroActivity : ComponentActivity() {
                 ShortcutAction.SAVE_STATE -> {
                     if (stateBasePath.isNotEmpty()) {
                         slotManager.saveState(runner, currentSlot)
-                        showOsd("Saved to ${currentSlot.label}")
+                        showOsd("Saved to ${currentSlot.label}", OsdPosition.BottomCenter)
                     }
                 }
                 ShortcutAction.LOAD_STATE -> {
                     if (stateBasePath.isNotEmpty() && slotManager.stateExists(currentSlot)) {
                         slotManager.loadState(runner, currentSlot)
                         sessionLog.log("RA state load (shortcut): slot=${currentSlot.label}")
-                        showOsd("Loaded ${currentSlot.label}")
+                        showOsd("Loaded ${currentSlot.label}", OsdPosition.BottomCenter)
                     }
                 }
                 ShortcutAction.RESET_GAME -> {
@@ -1131,7 +1132,7 @@ class LibretroActivity : ComponentActivity() {
                         startUndoTimer(30_000)
                     }
                     runner.reset()
-                    showOsd("Reset")
+                    showOsd("Reset", OsdPosition.BottomCenter)
                 }
                 ShortcutAction.SAVE_AND_QUIT -> {
                     renderer.paused = true
@@ -1143,12 +1144,12 @@ class LibretroActivity : ComponentActivity() {
                     val modes = ScalingMode.entries
                     scalingMode = modes[(scalingMode.ordinal + 1) % modes.size]
                     renderer.scalingMode = scalingMode
-                    showOsd("Scaling: ${scalingLabel()}")
+                    showOsd("Scaling: ${scalingLabel()}", OsdPosition.BottomCenter)
                 }
                 ShortcutAction.CYCLE_EFFECT -> {
                     cycleShader(1)
                     val label = if (shaderPreset.isEmpty()) "Off" else File(shaderPreset).nameWithoutExtension
-                    showOsd("Shader: $label")
+                    showOsd("Shader: $label", OsdPosition.BottomCenter)
                 }
                 ShortcutAction.TOGGLE_FF -> {
                     setFastForward(!fastForwarding)
@@ -1234,7 +1235,7 @@ class LibretroActivity : ComponentActivity() {
         val newIndex = ((currentDiskIndex + direction) + diskCount) % diskCount
         if (newIndex != currentDiskIndex && runner.setDiskIndex(newIndex)) {
             currentDiskIndex = newIndex
-            showOsd("Switched to ${diskLabel(currentDiskIndex)}")
+            showOsd("Switched to ${diskLabel(currentDiskIndex)}", OsdPosition.BottomCenter)
         }
     }
 
@@ -1244,7 +1245,7 @@ class LibretroActivity : ComponentActivity() {
                 "btn_north" -> {
                     slotManager.deleteState(currentSlot)
                     refreshSlotInfo()
-                    showOsd("Deleted ${currentSlot.label}")
+                    showOsd("Deleted ${currentSlot.label}", OsdPosition.BottomCenter)
                     replaceTop(screen.copy(confirmDeleteSlot = false))
                     true
                 }
@@ -1316,7 +1317,7 @@ class LibretroActivity : ComponentActivity() {
                     }
                     slotManager.saveState(runner, slot)
                     refreshSlotInfo()
-                    showOsd("Saved to ${slot.label}")
+                    showOsd("Saved to ${slot.label}", OsdPosition.BottomCenter)
                 }
                 closeAll()
             }
@@ -1329,7 +1330,7 @@ class LibretroActivity : ComponentActivity() {
                     startUndoTimer()
                     slotManager.loadState(runner, slot)
                     sessionLog.log("RA state load (IGM): slot=${slot.label}")
-                    showOsd("Loaded ${slot.label}")
+                    showOsd("Loaded ${slot.label}", OsdPosition.BottomCenter)
                 }
                 closeAll()
             }
@@ -2079,8 +2080,8 @@ class LibretroActivity : ComponentActivity() {
             }
             "btn_south" -> {
                 when (screen.selectedIndex) {
-                    0 -> { saveToPlatform(); showOsd("Saved for $platformName") }
-                    1 -> { saveToGame(); showOsd("Saved for this game") }
+                    0 -> { saveToPlatform(); showOsd("Saved for $platformName", OsdPosition.BottomCenter) }
+                    1 -> { saveToGame(); showOsd("Saved for this game", OsdPosition.BottomCenter) }
                 }
                 frontendSnapshot = null
                 shaderParamsDirty = false
@@ -2256,10 +2257,7 @@ class LibretroActivity : ComponentActivity() {
 
     // --- OSD / Undo ---
 
-    private fun showOsd(
-        message: String,
-        position: dev.cannoli.ui.components.OsdPosition = dev.cannoli.ui.components.OsdPosition.TopCenter,
-    ) {
+    private fun showOsd(message: String, position: OsdPosition = OsdPosition.TopCenter) {
         osdController.show(message, position)
     }
 
@@ -2277,7 +2275,7 @@ class LibretroActivity : ComponentActivity() {
         }
         val timeout = Runnable {
             if (raStartupDisplayName != null) {
-                showOsd(getString(R.string.ra_init_failed))
+                showOsd(getString(R.string.ra_init_failed), OsdPosition.TopCenter)
                 raStartupDisplayName = null
                 raStartupTimeout = null
             }
@@ -2293,10 +2291,10 @@ class LibretroActivity : ComponentActivity() {
         raStartupDisplayName = null
         val ra = raManager
         if (ra == null || ra.gameId <= 0 || ra.getAchievements().isEmpty()) {
-            showOsd(getString(R.string.ra_init_failed))
+            showOsd(getString(R.string.ra_init_failed), OsdPosition.TopCenter)
             return
         }
-        showOsd(getString(R.string.ra_login_success, name, ra.getStatus()))
+        showOsd(getString(R.string.ra_login_success, name, ra.getStatus()), OsdPosition.TopEnd)
     }
 
     private fun startUndoTimer(durationMs: Long = 60_000) {
@@ -2317,7 +2315,7 @@ class LibretroActivity : ComponentActivity() {
         }
         clearUndo()
         refreshSlotInfo()
-        showOsd(label)
+        showOsd(label, OsdPosition.BottomCenter)
         closeAll()
     }
 

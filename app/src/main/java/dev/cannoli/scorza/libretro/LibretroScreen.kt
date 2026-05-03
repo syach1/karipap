@@ -630,13 +630,12 @@ fun LibretroScreen(
             }
         }
 
-        val osdRequest = osdController.request.value
-        if (fastForwarding && !overlayVisible && osdRequest == null) {
+        if (fastForwarding && !overlayVisible) {
             val colors = LocalCannoliColors.current
             Box(
                 modifier = Modifier
-                    .align(Alignment.BottomCenter)
-                    .padding(bottom = 20.dp)
+                    .align(Alignment.TopEnd)
+                    .padding(top = 20.dp, end = 20.dp)
                     .clip(Radius.Pill)
                     .background(colors.highlight)
                     .padding(horizontal = 16.dp, vertical = 6.dp)
