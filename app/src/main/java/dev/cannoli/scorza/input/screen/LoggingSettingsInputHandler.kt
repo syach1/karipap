@@ -46,7 +46,6 @@ class LoggingSettingsInputHandler @Inject constructor(
         val newValue = !LoggingPrefs.isEnabled(category)
         LoggingPrefs.set(category, newValue)
         when (category) {
-            LoggingPrefs.Category.FILE_SCANNER -> settings.loggingFileScanner = newValue
             LoggingPrefs.Category.ROM_SCAN -> settings.loggingRomScan = newValue
             LoggingPrefs.Category.INPUT -> settings.loggingInput = newValue
             LoggingPrefs.Category.SESSION -> settings.loggingSession = newValue

@@ -203,7 +203,6 @@
     <string name="setting_kitchen_toggle">File Server</string>
     <string name="setting_logging">Logging</string>
     <string name="logging_title">Logging</string>
-    <string name="logging_file_scanner">File Scanner</string>
     <string name="logging_rom_scan">ROM Scan</string>
     <string name="logging_input">Input</string>
     <string name="logging_session">Game Session</string>

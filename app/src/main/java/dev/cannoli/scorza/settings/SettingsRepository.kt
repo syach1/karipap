@@ -271,10 +271,6 @@ class SettingsRepository @Inject constructor(@ApplicationContext context: Contex
         get() = jsonRead { optString(KEY_CACHED_UPDATE_CHANGELOG, "") }
         set(value) = jsonWrite { if (value.isEmpty()) remove(KEY_CACHED_UPDATE_CHANGELOG) else put(KEY_CACHED_UPDATE_CHANGELOG, value) }
 
-    var loggingFileScanner: Boolean
-        get() = jsonRead { optBoolean(KEY_LOGGING_FILE_SCANNER, false) }
-        set(value) = jsonWrite { put(KEY_LOGGING_FILE_SCANNER, value) }
-
     var loggingRomScan: Boolean
         get() = jsonRead { optBoolean(KEY_LOGGING_ROM_SCAN, false) }
         set(value) = jsonWrite { put(KEY_LOGGING_ROM_SCAN, value) }
@@ -342,7 +338,6 @@ class SettingsRepository @Inject constructor(@ApplicationContext context: Contex
         private const val KEY_CACHED_UPDATE_APK = "cached_update_apk"
         private const val KEY_CACHED_UPDATE_CHANGELOG = "cached_update_changelog"
         private const val KEY_CONTENT_MODE = "content_mode"
-        private const val KEY_LOGGING_FILE_SCANNER = "logging_file_scanner"
         private const val KEY_LOGGING_ROM_SCAN = "logging_rom_scan"
         private const val KEY_LOGGING_INPUT = "logging_input"
         private const val KEY_LOGGING_SESSION = "logging_session"

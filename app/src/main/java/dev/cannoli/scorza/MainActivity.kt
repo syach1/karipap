@@ -151,7 +151,6 @@ class MainActivity : ComponentActivity(), ActivityActions {
     }
 
     private fun loadLoggingPrefs() {
-        dev.cannoli.scorza.util.LoggingPrefs.fileScanner = settings.loggingFileScanner
         dev.cannoli.scorza.util.LoggingPrefs.romScan = settings.loggingRomScan
         dev.cannoli.scorza.util.LoggingPrefs.input = settings.loggingInput
         dev.cannoli.scorza.util.LoggingPrefs.session = settings.loggingSession
@@ -598,13 +597,6 @@ class MainActivity : ComponentActivity(), ActivityActions {
             editButtonsController.captureRawAxisEvent(axisValues)
             return true
         }
-        if (csForListen is LauncherScreen.EditButtons) {
-            val hatX = event.getAxisValue(android.view.MotionEvent.AXIS_HAT_X)
-            val hatY = event.getAxisValue(android.view.MotionEvent.AXIS_HAT_Y)
-            if (kotlin.math.abs(hatX) > 0.3f || kotlin.math.abs(hatY) > 0.3f) {
-                dev.cannoli.scorza.util.DebugLog.write("[edit-nav] motion hatX=$hatX hatY=$hatY")
-            }
-        }
         val source = event.source
         val isJoystick =
             source and android.view.InputDevice.SOURCE_JOYSTICK == android.view.InputDevice.SOURCE_JOYSTICK ||
@@ -636,7 +628,6 @@ class MainActivity : ComponentActivity(), ActivityActions {
     private fun initializeApp() {
         val root = File(settings.sdCardRoot)
         loadLoggingPrefs()
-        dev.cannoli.scorza.util.DebugLog.init(root.absolutePath)
         dev.cannoli.scorza.util.ScanLog.init(root.absolutePath)
         dev.cannoli.scorza.util.InputLog.init(root.absolutePath)
         platformConfig.load()
