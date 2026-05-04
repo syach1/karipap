@@ -50,13 +50,25 @@ class RetroAchievementsManager(
         nativeLoginWithPassword(username, password)
     }
 
+    @Volatile private var loadStartedAtMs: Long = 0L
+
+    val isResolving: Boolean
+        get() {
+            val started = loadStartedAtMs
+            if (started == 0L) return false
+            if (gameId > 0 && isMemoryInitialized) return false
+            return android.os.SystemClock.elapsedRealtime() - started < 5_000L
+        }
+
     fun loadGame(romPath: String, consoleId: Int) {
         logger("RA loadGame: romPath=$romPath consoleId=$consoleId")
+        loadStartedAtMs = android.os.SystemClock.elapsedRealtime()
         nativeLoadGame(romPath, consoleId)
     }
 
     fun loadGameById(gameId: Int, consoleId: Int) {
         logger("RA loadGameById: gameId=$gameId consoleId=$consoleId")
+        loadStartedAtMs = android.os.SystemClock.elapsedRealtime()
         nativeLoadGameById(gameId, consoleId)
     }
 
@@ -307,10 +319,14 @@ class RetroAchievementsManager(
 
     fun getDetectionStatus(): String {
         if (!nativeIsLoggedIn()) return "Not logged in"
-        if (gameId <= 0) return "Game not recognized"
+        if (gameId <= 0) {
+            return if (isResolving) "Identifying game\u2026" else "Game not recognized"
+        }
         val achievementCount = getAchievements().size
         if (achievementCount == 0) return "No achievements published"
-        if (!isMemoryInitialized) return "Memory init failed"
+        if (!isMemoryInitialized) {
+            return if (isResolving) "Initializing\u2026" else "Memory init failed"
+        }
         return "Active \u2022 $achievementCount achievements"
     }
 

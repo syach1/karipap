@@ -147,6 +147,25 @@ class LibretroActivity : ComponentActivity() {
     private var diskLabels = emptyList<String>()
 
     private var raManager: RetroAchievementsManager? = null
+    private var raInfoTick by mutableIntStateOf(0)
+
+    private val raPausedIdleHandler = Handler(Looper.getMainLooper())
+    private val raPausedIdleRunnable = object : Runnable {
+        override fun run() {
+            raManager?.idle()
+            raInfoTick++
+            if (renderer.paused) raPausedIdleHandler.postDelayed(this, 200L)
+        }
+    }
+
+    private fun startRaPausedIdle() {
+        raPausedIdleHandler.removeCallbacks(raPausedIdleRunnable)
+        raPausedIdleHandler.post(raPausedIdleRunnable)
+    }
+
+    private fun stopRaPausedIdle() {
+        raPausedIdleHandler.removeCallbacks(raPausedIdleRunnable)
+    }
 
     private var audioSampleRate = 0
     private var fastForwarding by mutableStateOf(false)
@@ -440,7 +459,7 @@ class LibretroActivity : ComponentActivity() {
                                             if (title.isNotEmpty()) "$id — $title" else "$id"
                                         } else null
                                     },
-                                    raDetection = raManager?.takeIf { it.isLoggedIn }?.getDetectionStatus()
+                                    raDetection = raInfoTick.let { raManager?.takeIf { it.isLoggedIn }?.getDetectionStatus() }
                                 ),
                                 activeMapping = activeMappingHolder.active.collectAsState().value,
                                 controllersViewModel = controllersViewModel,
@@ -467,7 +486,7 @@ class LibretroActivity : ComponentActivity() {
                 if (missingBios.isNotEmpty()) { finish(); return }
                 if (loading) return
                 if (screenStack.isEmpty()) openMenu() else pop()
-                if (screenStack.isEmpty()) { renderer.paused = false; runner.resumeAudio(); startVsyncPacer() }
+                if (screenStack.isEmpty()) { stopRaPausedIdle(); renderer.paused = false; runner.resumeAudio(); startVsyncPacer() }
             }
         })
 
@@ -1167,6 +1186,7 @@ class LibretroActivity : ComponentActivity() {
                         renderer.paused = true
                         runner.pauseAudio()
                         stopVsyncPacer()
+                        startRaPausedIdle()
                         screenStack.clear()
                         guideFiles = guides
                         if (guides.size == 1) openGuide(guides[0])
@@ -1187,6 +1207,7 @@ class LibretroActivity : ComponentActivity() {
     // --- Menu screen ---
 
     private fun openMenu() {
+        raManager?.idle()
         if (!raHasAchievements) {
             raManager?.let { ra -> raHasAchievements = ra.isLoggedIn && ra.getAchievements().isNotEmpty() }
         }
@@ -1196,6 +1217,7 @@ class LibretroActivity : ComponentActivity() {
         renderer.paused = true
         runner.pauseAudio()
         stopVsyncPacer()
+        startRaPausedIdle()
         refreshSlotInfo()
         refreshDiskInfo()
     }
@@ -1213,6 +1235,7 @@ class LibretroActivity : ComponentActivity() {
             setFastForward(false)
         }
         for (p in 0 until LibretroRunner.MAX_PORTS) runner.setInput(p, 0)
+        stopRaPausedIdle()
         renderer.paused = false
         runner.resumeAudio()
         startVsyncPacer()
