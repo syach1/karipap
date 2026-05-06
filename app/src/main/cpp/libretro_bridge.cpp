@@ -712,12 +712,12 @@ Java_dev_cannoli_scorza_libretro_LibretroRunner_nativeLoadGame(JNIEnv *env, jobj
          av_info.geometry.base_width, av_info.geometry.base_height,
          av_info.timing.fps, av_info.timing.sample_rate);
 
-    // Return [width, height, fps*100, sampleRate]
+    // Return [width, height, fps*1_000_000, sampleRate]
     jintArray result = env->NewIntArray(4);
     jint vals[4] = {
         (jint)av_info.geometry.base_width,
         (jint)av_info.geometry.base_height,
-        (jint)(av_info.timing.fps * 100),
+        (jint)(av_info.timing.fps * 1000000),
         (jint)av_info.timing.sample_rate
     };
     env->SetIntArrayRegion(result, 0, 4, vals);

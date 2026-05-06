@@ -40,7 +40,7 @@ class LibretroRunner {
         return SystemAvInfo(
             width = result[0],
             height = result[1],
-            fps = result[2] / 100.0,
+            fps = result[2] / 1_000_000.0,
             sampleRate = result[3]
         )
     }
