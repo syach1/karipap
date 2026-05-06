@@ -623,8 +623,8 @@ Java_dev_cannoli_scorza_libretro_LibretroRunner_nativeInit(JNIEnv *env, jobject,
 }
 
 JNIEXPORT void JNICALL
-Java_dev_cannoli_scorza_libretro_LibretroRunner_nativeAudioInit(JNIEnv *, jobject, jint sampleRate) {
-    nativeAudioInit(sampleRate);
+Java_dev_cannoli_scorza_libretro_LibretroRunner_nativeAudioInit(JNIEnv *, jobject, jint sampleRate, jdouble contentFps) {
+    nativeAudioInit(sampleRate, contentFps);
 }
 
 JNIEXPORT void JNICALL

@@ -51,6 +51,7 @@ struct AudioState : public oboe::AudioStreamDataCallback,
     SpeexResamplerState* resampler = nullptr;
     int32_t              inputRate = 0;
     int32_t              outputRate = OUTPUT_RATE;
+    double               contentFps = 60.0;
     int32_t              adaptiveInRate = 0;
     double               adaptiveIntegral = 0.0;
     uint32_t             adaptiveCounter = 0;
@@ -135,15 +136,9 @@ bool AudioState::openStream() {
     // LowLatency, so it stays off.
     lowLatencyStream = false;
 
-    // Assume 60 Hz content. Per-core fps isn't plumbed through from Kotlin
-    // yet; 50 Hz PAL cores end up with a slightly smaller FIFO than this
-    // formula implies, but MIN_BUFFER_MS clamps the result to 32 ms either
-    // way, which dominates the PAL case anyway. Wire this to avInfo.fps if
-    // latency tuning per core ever becomes interesting.
-    constexpr double ASSUMED_CONTENT_FPS = 60.0;
     double maxLatencyMs =
             std::max(MIN_BUFFER_MS,
-                     (BUFFER_SIZE_IN_VIDEO_FRAMES / ASSUMED_CONTENT_FPS) * 1000.0);
+                     (BUFFER_SIZE_IN_VIDEO_FRAMES / contentFps) * 1000.0);
 
     double sampleRateDivisor = 500.0 / maxLatencyMs;
     fifoCapacityFrames = floorToEven(
@@ -436,11 +431,12 @@ void AudioState::onErrorAfterClose(oboe::AudioStream* /*oldStream*/, oboe::Resul
 
 } // namespace
 
-void nativeAudioInit(int32_t sampleRate) {
+void nativeAudioInit(int32_t sampleRate, double contentFps) {
     nativeAudioStop();
 
     std::unique_lock<std::shared_mutex> lk(gLifecycleMutex);
     g.inputRate = sampleRate;
+    g.contentFps = (contentFps >= 1.0 && contentFps <= 240.0) ? contentFps : 60.0;
     g.running.store(false, std::memory_order_relaxed);
 
     // Reset per-session stat counters. These are atomic members of the
@@ -462,9 +458,9 @@ void nativeAudioInit(int32_t sampleRate) {
 
     char buf[256];
     snprintf(buf, sizeof(buf),
-             "request: inRate=%d outRate=%d channels=%d bufFrames=%.1f minMs=%.0f",
+             "request: inRate=%d outRate=%d channels=%d bufFrames=%.1f minMs=%.0f fps=%.4f",
              sampleRate, OUTPUT_RATE, CHANNELS,
-             BUFFER_SIZE_IN_VIDEO_FRAMES, MIN_BUFFER_MS);
+             BUFFER_SIZE_IN_VIDEO_FRAMES, MIN_BUFFER_MS, g.contentFps);
     {
         std::lock_guard<std::mutex> dlk(gDiagnosticsMutex);
         gDiagnosticsHeader = buf;

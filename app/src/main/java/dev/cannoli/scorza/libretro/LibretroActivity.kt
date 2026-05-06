@@ -557,7 +557,7 @@ class LibretroActivity : ComponentActivity() {
 
                 audioSampleRate = avInfo.sampleRate
                 sessionLog.log("audio init: requested sampleRate=${avInfo.sampleRate}")
-                runner.initAudio(avInfo.sampleRate)
+                runner.initAudio(avInfo.sampleRate, avInfo.fps)
                 runner.setAudioMuted(true)
                 if (dev.cannoli.scorza.util.LoggingPrefs.session) {
                     sessionLog.log("audio ${runner.getAudioDiagnostics()}")
