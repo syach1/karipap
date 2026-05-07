@@ -217,7 +217,7 @@ class InputRouter @Inject constructor(
             }
         },
         onBack = { dialogHandler.onCollectionPickerConfirm(this) },
-        onStart = { nav.dialogState.value = DialogState.NewCollectionInput(gamePaths = gamePaths) },
+        onWest = { nav.dialogState.value = DialogState.NewCollectionInput(gamePaths = gamePaths) },
     )
 
     private fun childPickerHandler() = scrollable<LauncherScreen.ChildPicker>(
