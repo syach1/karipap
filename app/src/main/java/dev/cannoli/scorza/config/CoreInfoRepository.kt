@@ -170,4 +170,20 @@ class CoreInfoRepository(private val assets: AssetManager, private val cacheDir:
         if (all.isEmpty()) return emptyList()
         return all.filter { !it.optional && !File(biosDir, it.path).exists() }
     }
+
+    fun requiresHwRender(coreId: String): Boolean {
+        val filename = "$coreId.info"
+        return try {
+            assets.open("core_info/$filename").bufferedReader().useLines { lines ->
+                for (line in lines) {
+                    val trimmed = line.trim()
+                    if (trimmed.startsWith("#")) continue
+                    if (!trimmed.startsWith("hw_render")) continue
+                    val value = trimmed.substringAfter('=').trim().removeSurrounding("\"")
+                    return@useLines value.equals("true", ignoreCase = true)
+                }
+                false
+            }
+        } catch (_: Exception) { false }
+    }
 }

@@ -126,6 +126,7 @@ class LibretroActivity : ComponentActivity() {
 
     private var coreOptions by mutableStateOf(emptyList<LibretroRunner.CoreOption>())
     private var coreCategories by mutableStateOf(emptyList<LibretroRunner.CoreOptionCategory>())
+    private var coreRequiresHwRender = false
     private var controllerTypes by mutableStateOf(emptyList<LibretroRunner.ControllerType>())
     private var controllerTypeIndex by mutableIntStateOf(0)
     private var portDeviceTypes by mutableStateOf<Map<Int, Int>>(emptyMap())
@@ -281,6 +282,35 @@ class LibretroActivity : ComponentActivity() {
 
     companion object {
         private val FF_SPEEDS = listOf(2, 3, 4, 6, 8)
+
+        // Substrings (lowercase) matched against "<key> <desc>" for cores declaring hw_render=true.
+        // These options only take effect with a hardware GL/Vulkan context, which the built-in
+        // runner does not provide, so we hide them rather than let users toggle no-ops.
+        private val HW_RENDER_GATED_PATTERNS = listOf(
+            "resolution",
+            "internal_res",
+            "upscal",
+            "msaa",
+            "multisamp",
+            "supersamp",
+            "antialias",
+            "anti_alias",
+            "anti-alias",
+            "anisotropic",
+            "widescreen_hack",
+            "widescreen hack",
+            "render_scal",
+            "render scal",
+            "texture_scaling",
+            "texture scaling",
+            "framebuffer scal",
+            "framebuffer_scal",
+            "pgxp",
+            "texture_filt",
+            "texture filter",
+            "bilinear",
+            "trilinear",
+        )
         private const val TRIGGER_PRESS_THRESHOLD = 0.5f
         private const val TRIGGER_RELEASE_THRESHOLD = 0.3f
         @Volatile var isRunning = false
@@ -505,6 +535,10 @@ class LibretroActivity : ComponentActivity() {
             }
             runner.init(systemDir, saveDir)
             sessionLog.log("runner.init completed")
+            val coreInfoRepoForHw = dev.cannoli.scorza.config.CoreInfoRepository(assets)
+            val coreIdForHw = File(corePath).name.removeSuffix("_android.so")
+            coreRequiresHwRender = coreInfoRepoForHw.requiresHwRender(coreIdForHw)
+            if (coreRequiresHwRender) sessionLog.log("core declares hw_render=true; hiding GPU-scaling options")
             val coreBaseName = File(corePath).nameWithoutExtension
             gameBaseName = if (romPath.isNotEmpty()) File(romPath).nameWithoutExtension else ""
             overrideManager = OverrideManager(cannoliRoot, platformTag, gameBaseName, coreBaseName)
@@ -545,7 +579,7 @@ class LibretroActivity : ComponentActivity() {
             withContext(kotlinx.coroutines.Dispatchers.Main) {
                 val (coreName, coreVersion) = runner.getSystemInfo()
                 coreInfoText = if (coreVersion.isNotEmpty()) "$coreName $coreVersion" else coreName
-                coreOptions = runner.getCoreOptions()
+                coreOptions = loadVisibleCoreOptions()
                 coreCategories = runner.getCoreCategories()
 
                 loadOverrides()
@@ -1383,7 +1417,7 @@ class LibretroActivity : ComponentActivity() {
                 }
             }
             menu.settingsIndex -> {
-                coreOptions = runner.getCoreOptions()
+                coreOptions = loadVisibleCoreOptions()
                 refreshShaderParams()
                 frontendSnapshot = buildCurrentSettings()
                 shaderParamsDirty = false
@@ -1447,7 +1481,7 @@ class LibretroActivity : ComponentActivity() {
                 when (screen.selectedIndex) {
                     IGMSettings.VIDEO -> push(IGMScreen.Video())
                     IGMSettings.EMULATOR -> {
-                        coreOptions = runner.getCoreOptions()
+                        coreOptions = loadVisibleCoreOptions()
                         coreCategories = runner.getCoreCategories()
                         push(IGMScreen.Emulator())
                     }
@@ -1707,7 +1741,7 @@ class LibretroActivity : ComponentActivity() {
         }?.key ?: return
         val value = if (enable) "true" else "false"
         runner.setCoreOption(key, value)
-        coreOptions = runner.getCoreOptions()
+        coreOptions = loadVisibleCoreOptions()
     }
 
     private fun cycleShader(direction: Int) {
@@ -2014,13 +2048,24 @@ class LibretroActivity : ComponentActivity() {
         }
     }
 
+    private fun loadVisibleCoreOptions(): List<LibretroRunner.CoreOption> {
+        val all = runner.getCoreOptions()
+        if (!coreRequiresHwRender) return all
+        return all.filterNot { isHwRenderGatedOption(it) }
+    }
+
+    private fun isHwRenderGatedOption(opt: LibretroRunner.CoreOption): Boolean {
+        val haystack = (opt.key + " " + opt.desc).lowercase()
+        return HW_RENDER_GATED_PATTERNS.any { it in haystack }
+    }
+
     private fun cycleEmulatorValue(options: List<LibretroRunner.CoreOption>, index: Int, direction: Int) {
         val opt = options.getOrNull(index) ?: return
         if (opt.values.isEmpty()) return
         val curIdx = opt.values.indexOfFirst { it.value == opt.selected }.coerceAtLeast(0)
         val newVal = opt.values[(curIdx + direction + opt.values.size) % opt.values.size]
         runner.setCoreOption(opt.key, newVal.value)
-        coreOptions = runner.getCoreOptions()
+        coreOptions = loadVisibleCoreOptions()
     }
 
 
@@ -2266,7 +2311,7 @@ class LibretroActivity : ComponentActivity() {
         for ((key, value) in settings.coreOptions) {
             runner.setCoreOption(key, value)
         }
-        coreOptions = runner.getCoreOptions()
+        coreOptions = loadVisibleCoreOptions()
         shaderParams = emptyList()
         refreshShaderParams()
         applySavedShaderParams(settings.shaderParams)
