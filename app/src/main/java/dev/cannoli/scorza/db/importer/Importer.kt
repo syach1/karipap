@@ -39,8 +39,8 @@ class Importer(
 ) {
     private val paths = CannoliPaths(cannoliRoot)
     private val collectionsDir = paths.collectionsDir
-    private val collectionParentsFile = File(collectionsDir, "collection_parents.txt")
     private val orderingDir = paths.configOrdering
+    private val collectionParentsFile = File(orderingDir, "collection_parents.txt")
     private val recentlyPlayedFile = paths.recentlyPlayedFile
     private val toolsDir = paths.toolsDir
     private val portsDir = paths.portsDir
