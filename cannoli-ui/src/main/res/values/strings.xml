@@ -55,6 +55,7 @@
     <string name="label_unmap">UNMAP</string>
     <string name="label_swap">SWAP</string>
     <string name="label_swap_with">SWAP WITH</string>
+    <string name="label_grant">GRANT</string>
     <string name="igm_reassign_players">Reassign Players</string>
 
     <string name="osd_cannot_steal_confirm">Remap the confirm button first to free this button</string>
@@ -279,6 +280,17 @@
     <string name="permission_grant">Waiting for system permission dialogs</string>
     <string name="permission_storage_label">All files access</string>
     <string name="permission_bluetooth_label">Nearby devices (Bluetooth)</string>
+
+    <!-- Onboarding permissions step -->
+    <string name="onboarding_header">SET UP CANNOLI</string>
+    <string name="onboarding_permissions_title">Permissions</string>
+    <string name="onboarding_storage_label">Storage access</string>
+    <string name="onboarding_storage_rationale">Cannoli reads your game files and writes saves, box art and config to your storage. It can\'t find your games without this.</string>
+    <string name="onboarding_bluetooth_label">Bluetooth</string>
+    <string name="onboarding_bluetooth_rationale">Lets Cannoli recognize your wireless controller by name so button mappings stay attached to the right pad.</string>
+    <string name="onboarding_status_granted">Granted</string>
+    <string name="onboarding_status_not_granted">Not granted</string>
+    <string name="onboarding_press_a_to_grant">Press A to grant</string>
 
     <!-- Boot error screen -->
     <string name="boot_error_title">Something went wrong</string>
