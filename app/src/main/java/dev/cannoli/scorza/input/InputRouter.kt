@@ -89,6 +89,7 @@ class InputRouter @Inject constructor(
         is LauncherScreen.ControllerDetail -> controllerDetailHandler
         is LauncherScreen.EditButtons -> editButtonsHandler
         is LauncherScreen.LoggingSettings -> loggingSettingsHandler
+        is LauncherScreen.OnboardingPermissions,
         is LauncherScreen.Setup,
         is LauncherScreen.Installing,
         is LauncherScreen.Housekeeping,

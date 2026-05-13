@@ -6,6 +6,7 @@ import dev.cannoli.scorza.input.LauncherActions
 import dev.cannoli.scorza.input.ScreenInputHandler
 import dev.cannoli.scorza.navigation.BrowsePurpose
 import dev.cannoli.scorza.navigation.LauncherScreen
+import dev.cannoli.scorza.navigation.OnboardingPermission
 import dev.cannoli.scorza.navigation.NavigationController
 import dev.cannoli.scorza.settings.SettingsRepository
 import dev.cannoli.scorza.setup.SetupCoordinator
@@ -23,9 +24,12 @@ class OnboardingInputHandler @Inject constructor(
 
     var onStartInstalling: ((targetPath: String) -> Unit)? = null
     var onInstallFinished: (() -> Unit)? = null
+    var onRequestPermission: ((OnboardingPermission) -> Unit)? = null
+    var onContinue: (() -> Unit)? = null
 
     override fun onUp() {
         when (val screen = nav.currentScreen) {
+            is LauncherScreen.OnboardingPermissions -> nav.replaceTop(screen.moved(-1))
             is LauncherScreen.Setup ->
                 nav.replaceTop(screen.copy(selectedIndex = (screen.selectedIndex - 1).coerceAtLeast(0)))
             is LauncherScreen.DirectoryBrowser -> {
@@ -42,6 +46,7 @@ class OnboardingInputHandler @Inject constructor(
 
     override fun onDown() {
         when (val screen = nav.currentScreen) {
+            is LauncherScreen.OnboardingPermissions -> nav.replaceTop(screen.moved(1))
             is LauncherScreen.Setup -> {
                 val maxIndex = if (screen.volumes.getOrNull(screen.volumeIndex)?.first == "Custom") 1 else 0
                 nav.replaceTop(screen.copy(selectedIndex = (screen.selectedIndex + 1).coerceAtMost(maxIndex)))
@@ -80,6 +85,8 @@ class OnboardingInputHandler @Inject constructor(
 
     override fun onConfirm() {
         when (val screen = nav.currentScreen) {
+            is LauncherScreen.OnboardingPermissions ->
+                if (!screen.isFocusedGranted) onRequestPermission?.invoke(screen.focusedPermission)
             is LauncherScreen.Setup -> {
                 val isCustom = screen.volumes.getOrNull(screen.volumeIndex)?.first == "Custom"
                 if (screen.selectedIndex == 1 && isCustom) {
@@ -141,6 +148,7 @@ class OnboardingInputHandler @Inject constructor(
 
     override fun onBack() {
         when (val screen = nav.currentScreen) {
+            is LauncherScreen.OnboardingPermissions -> activityActions.finishAffinity()
             is LauncherScreen.DirectoryBrowser -> {
                 val parent = setupCoordinator.parentDirectory(screen.currentPath)
                 if (parent != null) {
@@ -169,13 +177,18 @@ class OnboardingInputHandler @Inject constructor(
     }
 
     override fun onStart() {
-        val screen = nav.currentScreen as? LauncherScreen.Setup ?: return
-        val isCustom = screen.volumes.getOrNull(screen.volumeIndex)?.first == "Custom"
-        val continueEnabled = !isCustom || screen.customPath != null
-        if (!continueEnabled) return
-        val targetPath = if (isCustom) screen.customPath!!
-            else screen.volumes[screen.volumeIndex].second + "Cannoli/"
-        nav.replaceTop(LauncherScreen.Installing(targetPath = targetPath))
-        onStartInstalling?.invoke(targetPath)
+        when (val screen = nav.currentScreen) {
+            is LauncherScreen.OnboardingPermissions -> if (screen.allGranted) onContinue?.invoke()
+            is LauncherScreen.Setup -> {
+                val isCustom = screen.volumes.getOrNull(screen.volumeIndex)?.first == "Custom"
+                val continueEnabled = !isCustom || screen.customPath != null
+                if (!continueEnabled) return
+                val targetPath = if (isCustom) screen.customPath!!
+                    else screen.volumes[screen.volumeIndex].second + "Cannoli/"
+                nav.replaceTop(LauncherScreen.Installing(targetPath = targetPath))
+                onStartInstalling?.invoke(targetPath)
+            }
+            else -> {}
+        }
     }
 }
