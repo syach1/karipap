@@ -272,7 +272,6 @@ class LibretroActivity : ComponentActivity() {
         portRouter.snapshotEntries().count { !it.mapping.excludeFromGameplay }
 
     private fun refreshDiskInfo() {
-        if (!romPath.endsWith(".m3u", ignoreCase = true)) return
         diskCount = runner.getDiskCount()
         currentDiskIndex = runner.getDiskIndex()
         if (diskCount > 1) {
