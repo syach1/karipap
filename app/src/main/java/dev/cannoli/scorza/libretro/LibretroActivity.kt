@@ -1295,7 +1295,7 @@ class LibretroActivity : ComponentActivity() {
         val newIndex = ((currentDiskIndex + direction) + diskCount) % diskCount
         if (newIndex != currentDiskIndex && runner.setDiskIndex(newIndex)) {
             currentDiskIndex = newIndex
-            showOsd("Switched to ${diskLabel(currentDiskIndex)}", OsdPosition.BottomCenter)
+            showOsd("Switched to ${diskLabel(currentDiskIndex)}", OsdPosition.TopCenter)
         }
     }
 
