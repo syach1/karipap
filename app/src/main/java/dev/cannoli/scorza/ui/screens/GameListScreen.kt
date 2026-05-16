@@ -135,13 +135,33 @@ fun GameListScreen(
     val showFavoriteStars = viewModel.showFavoriteStars && !inFavoritesCollection
     val favoriteRomIds = state.favoriteRomIds
     val favoriteAppIds = state.favoriteAppIds
-    val duplicateRomNames = remember(state.items) {
-        state.items.asSequence()
+    val showPlatformInSuffix = state.isCollection || state.platformTag == "recently_played"
+    val romTagSuffixById = remember(state.items, showPlatformInSuffix) {
+        val result = HashMap<Long, String>()
+        val byName = state.items
             .filterIsInstance<ListItem.RomItem>()
-            .groupingBy { it.rom.displayName }
-            .eachCount()
-            .filterValues { it > 1 }
-            .keys
+            .groupBy { it.rom.displayName }
+        for ((_, group) in byName) {
+            if (group.size < 2) continue
+            if (showPlatformInSuffix) {
+                val byPlatform = group.groupBy { it.rom.platformTag }
+                for ((platform, pgroup) in byPlatform) {
+                    val platformPart = "(${platform.uppercase()})"
+                    if (pgroup.size == 1) {
+                        result[pgroup[0].rom.id] = platformPart
+                    } else {
+                        for (ri in pgroup) {
+                            result[ri.rom.id] = listOfNotNull(platformPart, ri.rom.tags).joinToString(" ")
+                        }
+                    }
+                }
+            } else {
+                for (ri in group) {
+                    ri.rom.tags?.let { result[ri.rom.id] = it }
+                }
+            }
+        }
+        result
     }
 
     ScreenBackground(backgroundImagePath = backgroundImagePath, backgroundTint = backgroundTint) {
@@ -201,17 +221,7 @@ fun GameListScreen(
                                     is ListItem.AppItem -> item.app.id in favoriteAppIds
                                     else -> false
                                 }
-                                val showPlatformInSuffix = state.isCollection || state.platformTag == "recently_played"
-                                val tagSuffix = (item as? ListItem.RomItem)
-                                    ?.takeIf { it.rom.displayName in duplicateRomNames }
-                                    ?.let { ri ->
-                                        if (showPlatformInSuffix) {
-                                            val platformPart = "(${ri.rom.platformTag.uppercase()})"
-                                            listOfNotNull(platformPart, ri.rom.tags).joinToString(" ")
-                                        } else {
-                                            ri.rom.tags
-                                        }
-                                    }
+                                val tagSuffix = (item as? ListItem.RomItem)?.let { romTagSuffixById[it.rom.id] }
                                 val displayName = item.rowDisplayName(showStar = false)
                                 val withStar = if (starred) "$STAR $displayName" else displayName
                                 val label = if (item is ListItem.SubfolderItem) "/ $withStar" else withStar
