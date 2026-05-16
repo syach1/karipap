@@ -139,7 +139,7 @@ class CollectionsRepository(private val db: CannoliDatabase) {
     ) { it.getInt(0) } ?: 0
 
     private fun readMemberIds(column: String, collectionId: Long): List<Long> = db.queryAll(
-        "SELECT $column FROM collection_members WHERE collection_id = ? AND $column IS NOT NULL ORDER BY sort_order",
+        "SELECT $column FROM collection_members WHERE collection_id = ? AND $column IS NOT NULL ORDER BY sort_order, id",
         collectionId,
     ) { it.getLong(0) }
 
