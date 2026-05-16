@@ -137,7 +137,10 @@ class LauncherActions @Inject constructor(
     fun openKitchen() {
         val km = KitchenManager
         val sdRoot = File(settings.sdCardRoot)
-        if (!km.isRunning) km.toggle(sdRoot, context.assets, settings.kitchenCodeBypass)
+        val romsRootProvider = {
+            settings.romDirectory.takeIf { it.isNotEmpty() }?.let { File(it) } ?: File(sdRoot, "Roms")
+        }
+        if (!km.isRunning) km.toggle(sdRoot, context.assets, settings.kitchenCodeBypass, romsRootProvider)
         else km.setCodeBypass(settings.kitchenCodeBypass)
         nav.dialogState.value = DialogState.Kitchen(
             urls = km.getUrls(hasActiveVpn()),

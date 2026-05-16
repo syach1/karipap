@@ -92,7 +92,10 @@ class SettingsInputHandler @Inject constructor(
                 cat?.key == "kitchen" -> {
                     val root = java.io.File(settings.sdCardRoot)
                     val km = dev.cannoli.scorza.server.KitchenManager
-                    if (!km.isRunning) km.toggle(root, context.assets, settings.kitchenCodeBypass)
+                    val romsRootProvider = {
+                        settings.romDirectory.takeIf { it.isNotEmpty() }?.let { java.io.File(it) } ?: java.io.File(root, "Roms")
+                    }
+                    if (!km.isRunning) km.toggle(root, context.assets, settings.kitchenCodeBypass, romsRootProvider)
                     else km.setCodeBypass(settings.kitchenCodeBypass)
                     nav.dialogState.value = DialogState.Kitchen(
                         urls = km.getUrls(hasActiveVpn()),

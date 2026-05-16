@@ -14,6 +14,7 @@ import kotlin.concurrent.thread
 class FileServer(
     private val cannoliRoot: File,
     private val assets: AssetManager,
+    private val romsRootProvider: () -> File = { File(cannoliRoot, "Roms") },
     private val port: Int = 1091,
     @Volatile var codeBypass: Boolean = false
 ) {
@@ -150,7 +151,8 @@ class FileServer(
                     val baseDir = RESOURCE_DIRS[resource]!!
                     val subpath = apiSegments.drop(1).joinToString("/")
                     val displayPath = if (subpath.isEmpty()) baseDir else "$baseDir/$subpath"
-                    val targetDir = File(cannoliRoot, displayPath)
+                    val resourceRoot = if (resource == "roms") romsRootProvider() else File(cannoliRoot, baseDir)
+                    val targetDir = if (subpath.isEmpty()) resourceRoot else File(resourceRoot, subpath)
                     when (method) {
                         "GET" -> handleList(output, targetDir, displayPath, queryParams["recursive"] == "true")
                         "POST" -> {
@@ -187,7 +189,7 @@ class FileServer(
                                     }
                                     String(bytes, 0, read)
                                 } else ""
-                                handleMove(output, baseDir, subpath, body)
+                                handleMove(output, resourceRoot, subpath, body)
                             }
                         }
                         else -> sendJson(output, 405, """{"error":"method not allowed"}""")
@@ -206,7 +208,7 @@ class FileServer(
     }
 
     private fun handleTags(output: OutputStream) {
-        val romsDir = File(cannoliRoot, "Roms")
+        val romsDir = romsRootProvider()
         val tags = romsDir.listFiles { f -> f.isDirectory }
             ?.map { it.name }
             ?.sorted()
@@ -288,7 +290,7 @@ class FileServer(
         }
     }
 
-    private fun handleMove(output: OutputStream, baseDir: String, subpath: String, body: String) {
+    private fun handleMove(output: OutputStream, resourceRoot: File, subpath: String, body: String) {
         val to = try {
             org.json.JSONObject(body).optString("to", "")
         } catch (_: Exception) { "" }
@@ -304,8 +306,8 @@ class FileServer(
             return
         }
 
-        val src = File(cannoliRoot, "$baseDir/$subpath")
-        val dst = File(cannoliRoot, "$baseDir/$to")
+        val src = File(resourceRoot, subpath)
+        val dst = File(resourceRoot, to)
 
         if (!isSecure(src) || !isSecure(dst)) {
             sendJson(output, 403, """{"error":"forbidden"}""")
@@ -796,7 +798,10 @@ class FileServer(
 
     private fun isSecure(file: File): Boolean {
         if (java.nio.file.Files.isSymbolicLink(file.toPath())) return false
-        return file.canonicalPath.startsWith(cannoliRoot.canonicalPath)
+        val canonical = file.canonicalPath
+        if (canonical.startsWith(cannoliRoot.canonicalPath)) return true
+        val romsCanonical = try { romsRootProvider().canonicalPath } catch (_: Exception) { return false }
+        return canonical.startsWith(romsCanonical)
     }
 
     private fun sanitizeFilename(name: String): String {

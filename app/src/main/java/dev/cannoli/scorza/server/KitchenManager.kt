@@ -10,12 +10,17 @@ object KitchenManager {
     val isRunning: Boolean get() = server?.isRunning ?: false
     val pin: String get() = server?.pin ?: ""
 
-    fun toggle(cannoliRoot: File, assets: AssetManager, codeBypass: Boolean = false) {
+    fun toggle(
+        cannoliRoot: File,
+        assets: AssetManager,
+        codeBypass: Boolean = false,
+        romsRootProvider: () -> File = { File(cannoliRoot, "Roms") }
+    ) {
         val s = server
         if (s != null && s.isRunning) {
             s.stop()
         } else {
-            val newServer = FileServer(cannoliRoot, assets, codeBypass = codeBypass)
+            val newServer = FileServer(cannoliRoot, assets, romsRootProvider, codeBypass = codeBypass)
             server = newServer
             newServer.start()
         }
