@@ -91,7 +91,7 @@ class MenuNavigationPoller @Inject constructor(
     }
 
     companion object {
-        private const val INITIAL_DELAY_MS = 400L
+        private const val INITIAL_DELAY_MS = 280L
         private const val REPEAT_INTERVAL_MS = 80L
         private const val POLL_INTERVAL_MS = 33L
         private const val MAX_PORTS = 4

@@ -784,7 +784,7 @@ class LibretroActivity : ComponentActivity() {
     private val portConsumedKeys = Array(LibretroRunner.MAX_PORTS) { mutableSetOf<Int>() }
     private val portPressedKeys = Array(LibretroRunner.MAX_PORTS) { mutableSetOf<Int>() }
     private val menuRepeatHandler = Handler(Looper.getMainLooper())
-    private val menuRepeatDelay = 400L
+    private val menuRepeatDelay = 280L
     private val menuRepeatInterval = 80L
     private val menuRepeatRunnable = object : Runnable {
         override fun run() {
