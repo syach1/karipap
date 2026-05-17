@@ -22,10 +22,12 @@ data class DeviceMatchRule(
         // Without this gate, two physically different controllers that report the same VID/PID
         // (Retroid handhelds fake VID/PID for built-in + BT pads) and run on the same Build.MODEL
         // score high enough on those two signals alone to inherit each other's saved mappings,
-        // even though the names plainly say they're different devices.
-        val ruleName = name
-        if (ruleName != null && ruleName.isNotEmpty() &&
-            input.name.isNotEmpty() && ruleName != input.name) {
+        // even though the names plainly say they're different devices. Compare trimmed strings
+        // so kernel-side whitespace inconsistencies (trailing spaces on some Android builds) do
+        // not break legitimate matches.
+        val ruleName = name?.trim()
+        val inputName = input.name.trim()
+        if (!ruleName.isNullOrEmpty() && inputName.isNotEmpty() && ruleName != inputName) {
             return 0
         }
 
@@ -53,7 +55,7 @@ data class DeviceMatchRule(
         }
 
         // Name only scores when vid+pid did not already match; vid+pid subsumes name identity.
-        if (!vidPidMatched && ruleName != null && ruleName.isNotEmpty() && ruleName == input.name) {
+        if (!vidPidMatched && !ruleName.isNullOrEmpty() && ruleName == inputName) {
             score += 50
         }
 
