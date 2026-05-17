@@ -447,11 +447,9 @@ class LibretroActivity : ComponentActivity() {
                         Box(modifier = Modifier.fillMaxSize().background(Color.Black))
                     } else {
                         val screen = if (revealed) currentScreen else null
-                        // Push the screen's input handler into the registry. Once registered,
-                        // InputDispatcher's wired callbacks dispatch to this handler instead of
-                        // falling back to legacyNavigate. Buttons and Shortcuts stay on the
-                        // legacy onKeyDown path because they need raw event data; the dispatcher
-                        // is not invoked for those (see onKeyDown special-case).
+                        // Push the screen's input handler into the registry. InputDispatcher's
+                        // wired callbacks dispatch to this handler; Buttons and Shortcuts
+                        // override ScreenInputHandler.onRawKeyDown to capture raw events.
                         val igmHandler = androidx.compose.runtime.remember(screen) {
                             screen?.let { igmHandlerFor(it) }
                         }
@@ -808,7 +806,8 @@ class LibretroActivity : ComponentActivity() {
 
     private fun fireMenuNavForKey(keyCode: Int) {
         // Bypass keycode synthesis (deviceId would be virtual and the dispatcher would skip it).
-        // Calling the wired callback directly routes through registry top or legacyNavigate.
+        // Calling the wired callback directly routes through the current screen handler in the
+        // registry.
         when (keyCode) {
             KeyEvent.KEYCODE_DPAD_UP -> inputDispatcher.onUp()
             KeyEvent.KEYCODE_DPAD_DOWN -> inputDispatcher.onDown()
@@ -1123,71 +1122,27 @@ class LibretroActivity : ComponentActivity() {
     }
 
     /**
-     * Wires the shared InputDispatcher's canonical-event callbacks into IGM dispatch. The
-     * dispatcher's stable semantics (mapping.menuConfirm swap, activation, held-state tracking)
-     * are reused; the IGM's per-screen handle*Input switch is invoked via [legacyNavigate] for
-     * screens that have not been migrated to ScreenInput composables yet. When a screen has
-     * pushed a ScreenInput handler, that handler wins.
+     * Wires the shared InputDispatcher's canonical-event callbacks for IGM dispatch. Every IGM
+     * screen registers a handler via ScreenInput in setContent (see igmHandlerFor), so the
+     * registry's top is always the active IGM screen's handler. EmptyScreenInputHandler defaults
+     * all methods to no-ops, so the no-screen case (gameplay) is a safe no-op.
      */
     private fun wireDispatcherForIGM() {
-        val empty = dev.cannoli.scorza.input.screen.EmptyScreenInputHandler
-        inputDispatcher.onUp = {
-            val h = screenInputRegistry.top
-            if (h !== empty) h.onUp() else legacyNavigate("btn_up")
-        }
-        inputDispatcher.onDown = {
-            val h = screenInputRegistry.top
-            if (h !== empty) h.onDown() else legacyNavigate("btn_down")
-        }
-        inputDispatcher.onLeft = {
-            val h = screenInputRegistry.top
-            if (h !== empty) h.onLeft() else legacyNavigate("btn_left")
-        }
-        inputDispatcher.onRight = {
-            val h = screenInputRegistry.top
-            if (h !== empty) h.onRight() else legacyNavigate("btn_right")
-        }
-        inputDispatcher.onConfirm = {
-            val h = screenInputRegistry.top
-            if (h !== empty) h.onConfirm() else legacyNavigate("btn_south")
-        }
-        inputDispatcher.onBack = {
-            val h = screenInputRegistry.top
-            if (h !== empty) h.onBack() else legacyNavigate("btn_east")
-        }
-        inputDispatcher.onStart = {
-            val h = screenInputRegistry.top
-            if (h !== empty) h.onStart() else legacyNavigate("btn_start")
-        }
-        inputDispatcher.onSelect = {
-            val h = screenInputRegistry.top
-            if (h !== empty) h.onSelect() else legacyNavigate("btn_select")
-        }
+        inputDispatcher.onUp = { screenInputRegistry.top.onUp() }
+        inputDispatcher.onDown = { screenInputRegistry.top.onDown() }
+        inputDispatcher.onLeft = { screenInputRegistry.top.onLeft() }
+        inputDispatcher.onRight = { screenInputRegistry.top.onRight() }
+        inputDispatcher.onConfirm = { screenInputRegistry.top.onConfirm() }
+        inputDispatcher.onBack = { screenInputRegistry.top.onBack() }
+        inputDispatcher.onStart = { screenInputRegistry.top.onStart() }
+        inputDispatcher.onSelect = { screenInputRegistry.top.onSelect() }
         inputDispatcher.onSelectUp = { screenInputRegistry.top.onSelectUp() }
-        inputDispatcher.onNorth = {
-            val h = screenInputRegistry.top
-            if (h !== empty) h.onNorth() else legacyNavigate("btn_north")
-        }
-        inputDispatcher.onWest = {
-            val h = screenInputRegistry.top
-            if (h !== empty) h.onWest() else legacyNavigate("btn_west")
-        }
-        inputDispatcher.onL1 = {
-            val h = screenInputRegistry.top
-            if (h !== empty) h.onL1() else legacyNavigate("btn_l")
-        }
-        inputDispatcher.onR1 = {
-            val h = screenInputRegistry.top
-            if (h !== empty) h.onR1() else legacyNavigate("btn_r")
-        }
-        inputDispatcher.onL2 = {
-            val h = screenInputRegistry.top
-            if (h !== empty) h.onL2() else legacyNavigate("btn_l2")
-        }
-        inputDispatcher.onR2 = {
-            val h = screenInputRegistry.top
-            if (h !== empty) h.onR2() else legacyNavigate("btn_r2")
-        }
+        inputDispatcher.onNorth = { screenInputRegistry.top.onNorth() }
+        inputDispatcher.onWest = { screenInputRegistry.top.onWest() }
+        inputDispatcher.onL1 = { screenInputRegistry.top.onL1() }
+        inputDispatcher.onR1 = { screenInputRegistry.top.onR1() }
+        inputDispatcher.onL2 = { screenInputRegistry.top.onL2() }
+        inputDispatcher.onR2 = { screenInputRegistry.top.onR2() }
     }
 
     /**
@@ -1248,43 +1203,6 @@ class LibretroActivity : ComponentActivity() {
             override fun onL2() { onButton("btn_l2") }
             override fun onR2() { onButton("btn_r2") }
         }
-
-    /**
-     * Routes a semantic button event into the existing per-screen handle*Input switch. The IGM
-     * string vocabulary (post-resolveNavButton swap) treats "btn_south" as semantic confirm and
-     * "btn_east" as semantic back, which is what the dispatcher's onConfirm/onBack already
-     * provide via mapping.menuConfirm. Returns false for screens that depend on raw event details
-     * (Buttons, Shortcuts) -- those stay on the legacy onKeyDown switch path. Also kept as the
-     * dispatcher's fallback when no ScreenInput is pushed (defensive).
-     */
-    private fun legacyNavigate(button: String): Boolean {
-        val screen = currentScreen ?: return false
-        return when (screen) {
-            is IGMScreen.Menu -> handleMenuInput(screen, button)
-            is IGMScreen.Settings -> handleCategoryInput(screen, button)
-            is IGMScreen.Video -> handleVideoInput(screen, button)
-            is IGMScreen.Advanced -> handleAdvancedInput(screen, button)
-            is IGMScreen.ShaderSettings -> handleShaderSettingsInput(screen, button)
-            is IGMScreen.Emulator -> handleEmulatorInput(screen, button)
-            is IGMScreen.EmulatorCategory -> handleEmulatorCategoryInput(screen, button)
-            is IGMScreen.SavePrompt -> handleSavePromptInput(screen, button)
-            is IGMScreen.Info -> {
-                when (button) {
-                    "btn_east", "btn_south" -> { infoScrollDir = 0; pop(); true }
-                    "btn_up" -> { infoScrollDir = -1; true }
-                    "btn_down" -> { infoScrollDir = 1; true }
-                    else -> true
-                }
-            }
-            is IGMScreen.Achievements -> handleAchievementsInput(screen, button)
-            is IGMScreen.AchievementDetail -> handleAchievementDetailInput(screen, button)
-            is IGMScreen.GuidePicker -> handleGuidePickerInput(screen, button)
-            is IGMScreen.Guide -> handleGuideInput(screen, button)
-            is IGMScreen.ReassignPlayers -> handleReassignPlayersInput(screen, button)
-            is IGMScreen.Buttons -> false
-            is IGMScreen.Shortcuts -> false
-        }
-    }
 
     private fun syncSyntheticTrigger(
         deviceId: Int,
