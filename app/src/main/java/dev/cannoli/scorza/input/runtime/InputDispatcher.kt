@@ -60,6 +60,9 @@ class InputDispatcher @Inject constructor(
                     val direct = evaluator.canonicalsHeldByKeyCode(keyCode)
                     val fallback = if (direct.isEmpty()) dpadFallbackForRepeat(evaluator, keyCode) else emptyList()
                     val canonicals = if (direct.isNotEmpty()) direct else fallback
+                    dev.cannoli.scorza.util.InputLog.write(
+                        "repeat id=$deviceId code=$keyCode rc=$repeatCount direct=${direct.map { it.name }} fallback=${fallback.map { it.name }} -> ${canonicals.map { it.name }}"
+                    )
                     if (canonicals.isEmpty()) return false
                     maybeActivate(deviceId)
                     activeMappingHolder.set(mapping)

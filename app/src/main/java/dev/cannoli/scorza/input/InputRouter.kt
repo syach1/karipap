@@ -63,6 +63,9 @@ class InputRouter @Inject constructor(
         }
         dispatcher.onDown = {
             val h = screenInputRegistry.top
+            dev.cannoli.scorza.util.InputLog.write(
+                "wired onDown reg=${if (h === dev.cannoli.scorza.input.screen.EmptyScreenInputHandler) "empty" else h::class.simpleName}"
+            )
             if (h !== dev.cannoli.scorza.input.screen.EmptyScreenInputHandler) h.onDown()
             else if (!dialogHandler.onDown()) currentHandler().onDown()
         }
