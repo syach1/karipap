@@ -79,6 +79,7 @@ class MainActivity : ComponentActivity(), ActivityActions {
     @Inject lateinit var router: InputRouter
     @Inject lateinit var onboardingHandler: dev.cannoli.scorza.input.screen.OnboardingInputHandler
     @Inject lateinit var inputDispatcher: InputDispatcher
+    @Inject lateinit var screenInputRegistry: dev.cannoli.scorza.input.runtime.ScreenInputRegistry
     @Inject lateinit var controllerBridge: ControllerBridge
     @Inject lateinit var portRouter: dev.cannoli.scorza.input.runtime.PortRouter
     @Inject lateinit var activeMappingHolder: dev.cannoli.scorza.input.runtime.ActiveMappingHolder
@@ -184,7 +185,8 @@ class MainActivity : ComponentActivity(), ActivityActions {
             CannoliTheme(fontFamily = themeFont) {
                 Surface(modifier = Modifier.fillMaxSize()) {
                     CompositionLocalProvider(
-                        LocalPortraitMargin provides PortraitMarginState(marginPx = settings.portraitMarginPx)
+                        LocalPortraitMargin provides PortraitMarginState(marginPx = settings.portraitMarginPx),
+                        dev.cannoli.scorza.input.screen.compose.LocalScreenInputRegistry provides screenInputRegistry,
                     ) {
                     when (val s = boot) {
                         is BootState.Resolving -> Box(modifier = Modifier.fillMaxSize()) {}
@@ -502,8 +504,9 @@ class MainActivity : ComponentActivity(), ActivityActions {
         return handled || super.onGenericMotionEvent(event)
     }
 
-    // Auto-repeat for held d-pad / left stick on hat-axis controllers (Android does not synthesize
-    // KeyEvent repeats for hat-axis events; we poll the axis and re-fire callbacks ourselves).
+    // Auto-repeat for held left-stick navigation. Hats reach onKeyDown via Android's
+    // KEYCODE_DPAD_* synthesis (which Android auto-repeats), so they are not consulted here;
+    // including them would double-fire the first press on pads that emit both endpoints.
     private val menuRepeatHandler = Handler(Looper.getMainLooper())
     private val menuRepeatDelayMs = 400L
     private val menuRepeatIntervalMs = 80L
@@ -523,28 +526,19 @@ class MainActivity : ComponentActivity(), ActivityActions {
     }
 
     private fun updateMenuRepeatFromMotion(event: MotionEvent, dispatcherHandled: Boolean) {
-        val hatX = event.getAxisValue(MotionEvent.AXIS_HAT_X)
-        val hatY = event.getAxisValue(MotionEvent.AXIS_HAT_Y)
         val stickX = event.getAxisValue(MotionEvent.AXIS_X)
         val stickY = event.getAxisValue(MotionEvent.AXIS_Y)
-        val x = if (kotlin.math.abs(hatX) > 0.5f) hatX else stickX
-        val y = if (kotlin.math.abs(hatY) > 0.5f) hatY else stickY
         val newDir = when {
-            y < -0.5f -> 1
-            y > 0.5f -> 2
-            x < -0.5f -> 3
-            x > 0.5f -> 4
+            stickY < -0.5f -> 1
+            stickY > 0.5f -> 2
+            stickX < -0.5f -> 3
+            stickX > 0.5f -> 4
             else -> 0
         }
         if (newDir != menuHeldDir) {
             menuRepeatHandler.removeCallbacks(menuRepeatRunnable)
             menuHeldDir = newDir
             if (newDir != 0) {
-                // Path A (the v2 mapping system) only fires for sticks that are bound as
-                // DIGITAL_BUTTON; for analog-only stick bindings, the dispatcher returns false and
-                // the first action would otherwise be deferred by menuRepeatDelayMs, which makes a
-                // quick stick tap register as nothing. Fire the first step ourselves when Path A
-                // didn't already.
                 if (!dispatcherHandled) {
                     when (newDir) {
                         1 -> inputDispatcher.onUp()

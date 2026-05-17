@@ -64,6 +64,7 @@ class LibretroActivity : ComponentActivity() {
     @Inject lateinit var settings: SettingsRepository
     @Inject lateinit var portRouter: dev.cannoli.scorza.input.runtime.PortRouter
     @Inject lateinit var controllerBridge: dev.cannoli.scorza.input.runtime.ControllerBridge
+    @Inject lateinit var screenInputRegistry: dev.cannoli.scorza.input.runtime.ScreenInputRegistry
     @Inject lateinit var activeMappingHolder: dev.cannoli.scorza.input.runtime.ActiveMappingHolder
     @Inject lateinit var controllersViewModel: dev.cannoli.scorza.ui.viewmodel.ControllersViewModel
     @Inject lateinit var bindingController: dev.cannoli.scorza.input.BindingController
@@ -434,7 +435,10 @@ class LibretroActivity : ComponentActivity() {
 
         setContent {
             CannoliTheme(fontFamily = fontFamily) {
-                CompositionLocalProvider(LocalCannoliColors provides colors) {
+                CompositionLocalProvider(
+                    LocalCannoliColors provides colors,
+                    dev.cannoli.scorza.input.screen.compose.LocalScreenInputRegistry provides screenInputRegistry,
+                ) {
                     if (missingBios.isNotEmpty()) {
                         MissingBiosScreen(missingBios)
                     } else if (loading) {
@@ -790,17 +794,15 @@ class LibretroActivity : ComponentActivity() {
     }
 
     private fun handleMenuMotion(event: android.view.MotionEvent) {
-        val hatX = event.getAxisValue(android.view.MotionEvent.AXIS_HAT_X)
-        val hatY = event.getAxisValue(android.view.MotionEvent.AXIS_HAT_Y)
+        // Stick axes only. Hats reach onKeyDown via Android's KEYCODE_DPAD_* synthesis; including
+        // them here double-fires the first press on pads that emit both endpoints.
         val stickX = event.getAxisValue(android.view.MotionEvent.AXIS_X)
         val stickY = event.getAxisValue(android.view.MotionEvent.AXIS_Y)
-        val x = if (kotlin.math.abs(hatX) > 0.5f) hatX else stickX
-        val y = if (kotlin.math.abs(hatY) > 0.5f) hatY else stickY
         val key = when {
-            y < -0.5f -> KeyEvent.KEYCODE_DPAD_UP
-            y > 0.5f -> KeyEvent.KEYCODE_DPAD_DOWN
-            x < -0.5f -> KeyEvent.KEYCODE_DPAD_LEFT
-            x > 0.5f -> KeyEvent.KEYCODE_DPAD_RIGHT
+            stickY < -0.5f -> KeyEvent.KEYCODE_DPAD_UP
+            stickY > 0.5f -> KeyEvent.KEYCODE_DPAD_DOWN
+            stickX < -0.5f -> KeyEvent.KEYCODE_DPAD_LEFT
+            stickX > 0.5f -> KeyEvent.KEYCODE_DPAD_RIGHT
             else -> 0
         }
         if (key != menuHeldKey) {
