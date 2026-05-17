@@ -1015,20 +1015,10 @@ class LibretroActivity : ComponentActivity() {
         }
         if (loading) return true
         if (isSystemMediaKey(keyCode)) return super.onKeyDown(keyCode, event)
-        val screen = currentScreen ?: return handleGameplayInput(keyCode, event)
-        // Screens that need the raw event (deviceId, repeatCount) stay on the legacy switch
-        // path. Everything else routes through InputDispatcher so the shared substrate handles
-        // activation, mapping confirm-swap, held-state tracking, and feeds MenuNavigationPoller
-        // for auto-repeat. The dispatcher's callbacks bridge into legacyNavigate or into the
-        // currently-pushed ScreenInput handler, whichever is set.
-        if (screen is IGMScreen.Buttons) {
-            val button = resolveNavButton(keyCode, event.deviceId)
-            return handleButtonsInput(screen, keyCode, event.deviceId, event.repeatCount, button)
-        }
-        if (screen is IGMScreen.Shortcuts) {
-            val button = resolveNavButton(keyCode, event.deviceId)
-            return handleShortcutsInput(screen, keyCode, button)
-        }
+        if (currentScreen == null) return handleGameplayInput(keyCode, event)
+        // All IGM screens route through the dispatcher. Buttons and Shortcuts override the
+        // ScreenInputHandler.onRawKeyDown hook to capture raw deviceId/repeatCount; others
+        // dispatch via canonical events into the per-screen handler returned by igmHandlerFor.
         return inputDispatcher.handleKeyEvent(event) || super.onKeyDown(keyCode, event)
     }
 
@@ -1227,8 +1217,18 @@ class LibretroActivity : ComponentActivity() {
         is IGMScreen.GuidePicker -> simpleIgmHandler { btn -> handleGuidePickerInput(screen, btn) }
         is IGMScreen.Guide -> simpleIgmHandler { btn -> handleGuideInput(screen, btn) }
         is IGMScreen.ReassignPlayers -> simpleIgmHandler { btn -> handleReassignPlayersInput(screen, btn) }
-        is IGMScreen.Buttons -> null  // raw event path; handled in onKeyDown special-case
-        is IGMScreen.Shortcuts -> null  // raw event path; handled in onKeyDown special-case
+        is IGMScreen.Buttons -> object : dev.cannoli.scorza.input.ScreenInputHandler {
+            override fun onRawKeyDown(keyCode: Int, event: KeyEvent): Boolean {
+                val button = resolveNavButton(keyCode, event.deviceId)
+                return handleButtonsInput(screen, keyCode, event.deviceId, event.repeatCount, button)
+            }
+        }
+        is IGMScreen.Shortcuts -> object : dev.cannoli.scorza.input.ScreenInputHandler {
+            override fun onRawKeyDown(keyCode: Int, event: KeyEvent): Boolean {
+                val button = resolveNavButton(keyCode, event.deviceId)
+                return handleShortcutsInput(screen, keyCode, button)
+            }
+        }
     }
 
     private fun simpleIgmHandler(onButton: (String) -> Boolean): dev.cannoli.scorza.input.ScreenInputHandler =
