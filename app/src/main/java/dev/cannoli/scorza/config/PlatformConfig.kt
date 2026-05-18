@@ -630,6 +630,7 @@ class PlatformConfig(
                 "none" -> DataBinding.None
                 "file_provider" -> DataBinding.FileProvider(grantPermission = obj.optBoolean("grantPermission", true))
                 "absolute_path" -> DataBinding.AbsolutePath
+                "external_storage_saf" -> DataBinding.ExternalStorageSaf
                 "custom_scheme" -> DataBinding.CustomScheme(
                     scheme = obj.optString("scheme").ifEmpty {
                         throw IllegalArgumentException("custom_scheme: missing `scheme`")

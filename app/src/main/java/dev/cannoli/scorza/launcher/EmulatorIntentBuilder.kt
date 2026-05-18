@@ -20,6 +20,7 @@ object EmulatorIntentBuilder {
             DataBinding.None -> null
             is DataBinding.FileProvider -> fileProviderUri(context, romFile)
             DataBinding.AbsolutePath -> Uri.fromFile(romFile)
+            DataBinding.ExternalStorageSaf -> externalStorageSafUri(romFile) ?: Uri.fromFile(romFile)
             is DataBinding.CustomScheme -> Uri.parse("${d.scheme}://${d.authority}")
                 .buildUpon().appendPath(romFile.absolutePath).build()
         }
@@ -92,4 +93,30 @@ object EmulatorIntentBuilder {
 
     private fun fileProviderUri(context: Context, romFile: File): Uri =
         FileProvider.getUriForFile(context, "${context.packageName}.fileprovider", romFile)
+
+    // Synthesize a tree-delegated SAF document URI on com.android.externalstorage.documents
+    // from an absolute path. The tree segment is set to the rom's parent directory so the
+    // framework's permission check picks up any persistent tree grant the receiver holds at
+    // that level or above. A plain document URI would not tap into the receiver's grant.
+    private fun externalStorageSafUri(romFile: File): Uri? {
+        val path = romFile.absolutePath
+        val emulatedPrefix = "/storage/emulated/0/"
+        val storagePrefix = "/storage/"
+        val (volume, relative) = when {
+            path.startsWith(emulatedPrefix) -> "primary" to path.removePrefix(emulatedPrefix)
+            path.startsWith(storagePrefix) -> {
+                val rest = path.removePrefix(storagePrefix)
+                val slash = rest.indexOf('/')
+                if (slash <= 0) return null
+                rest.substring(0, slash) to rest.substring(slash + 1)
+            }
+            else -> return null
+        }
+        val parent = relative.substringBeforeLast('/', "")
+        val docId = "$volume:$relative"
+        val treeId = "$volume:$parent"
+        val authority = "com.android.externalstorage.documents"
+        val treeUri = android.provider.DocumentsContract.buildTreeDocumentUri(authority, treeId)
+        return android.provider.DocumentsContract.buildDocumentUriUsingTree(treeUri, docId)
+    }
 }
