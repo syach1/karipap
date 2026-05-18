@@ -81,6 +81,7 @@ class MainActivity : ComponentActivity(), ActivityActions {
     @Inject lateinit var inputDispatcher: InputDispatcher
     @Inject lateinit var screenInputRegistry: dev.cannoli.scorza.input.runtime.ScreenInputRegistry
     @Inject lateinit var menuNavigationPoller: dev.cannoli.scorza.input.runtime.MenuNavigationPoller
+    @Inject lateinit var stickAutoRepeat: dev.cannoli.scorza.input.runtime.StickAutoRepeat
     @Inject lateinit var controllerBridge: ControllerBridge
     @Inject lateinit var portRouter: dev.cannoli.scorza.input.runtime.PortRouter
     @Inject lateinit var activeMappingHolder: dev.cannoli.scorza.input.runtime.ActiveMappingHolder
@@ -371,10 +372,8 @@ class MainActivity : ComponentActivity(), ActivityActions {
         super.onPause()
         menuNavigationPoller.stop()
         // Cancel any in-flight stick auto-repeat so it does not keep firing dispatcher callbacks
-        // after LibretroActivity has rewired them. menuHeldDir reset so the next resume reads a
-        // fresh direction transition.
-        menuRepeatHandler.removeCallbacks(menuRepeatRunnable)
-        menuHeldDir = 0
+        // after LibretroActivity has rewired them.
+        stickAutoRepeat.stop()
         controllerBridge.onDeviceAdded = null
         controllerBridge.onDeviceRemoved = null
         if (isReady && nav.pendingRecentlyPlayedReorder) {
@@ -512,56 +511,8 @@ class MainActivity : ComponentActivity(), ActivityActions {
             return true
         }
         val handled = inputDispatcher.handleMotionEvent(event)
-        updateMenuRepeatFromMotion(event, dispatcherHandled = handled)
+        stickAutoRepeat.handleMotion(event)
         return handled || super.onGenericMotionEvent(event)
-    }
-
-    // Auto-repeat for held left-stick navigation. Hats reach onKeyDown via Android's
-    // KEYCODE_DPAD_* synthesis (which Android auto-repeats), so they are not consulted here;
-    // including them would double-fire the first press on pads that emit both endpoints.
-    private val menuRepeatHandler = Handler(Looper.getMainLooper())
-    private val menuRepeatDelayMs = 400L
-    private val menuRepeatIntervalMs = 80L
-    private var menuHeldDir = 0
-    private val menuRepeatRunnable = object : Runnable {
-        override fun run() {
-            when (menuHeldDir) {
-                1 -> inputDispatcher.onUp()
-                2 -> inputDispatcher.onDown()
-                3 -> inputDispatcher.onLeft()
-                4 -> inputDispatcher.onRight()
-            }
-            if (menuHeldDir != 0) {
-                menuRepeatHandler.postDelayed(this, menuRepeatIntervalMs)
-            }
-        }
-    }
-
-    private fun updateMenuRepeatFromMotion(event: MotionEvent, dispatcherHandled: Boolean) {
-        val stickX = event.getAxisValue(MotionEvent.AXIS_X)
-        val stickY = event.getAxisValue(MotionEvent.AXIS_Y)
-        val newDir = when {
-            stickY < -0.5f -> 1
-            stickY > 0.5f -> 2
-            stickX < -0.5f -> 3
-            stickX > 0.5f -> 4
-            else -> 0
-        }
-        if (newDir != menuHeldDir) {
-            menuRepeatHandler.removeCallbacks(menuRepeatRunnable)
-            menuHeldDir = newDir
-            if (newDir != 0) {
-                if (!dispatcherHandled) {
-                    when (newDir) {
-                        1 -> inputDispatcher.onUp()
-                        2 -> inputDispatcher.onDown()
-                        3 -> inputDispatcher.onLeft()
-                        4 -> inputDispatcher.onRight()
-                    }
-                }
-                menuRepeatHandler.postDelayed(menuRepeatRunnable, menuRepeatDelayMs)
-            }
-        }
     }
 
     private val triggerL2HeldDevices = mutableSetOf<Int>()

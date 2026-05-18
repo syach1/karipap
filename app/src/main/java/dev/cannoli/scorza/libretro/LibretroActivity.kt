@@ -67,6 +67,7 @@ class LibretroActivity : ComponentActivity() {
     @Inject lateinit var screenInputRegistry: dev.cannoli.scorza.input.runtime.ScreenInputRegistry
     @Inject lateinit var inputDispatcher: dev.cannoli.scorza.input.runtime.InputDispatcher
     @Inject lateinit var menuNavigationPoller: dev.cannoli.scorza.input.runtime.MenuNavigationPoller
+    @Inject lateinit var stickAutoRepeat: dev.cannoli.scorza.input.runtime.StickAutoRepeat
     @Inject lateinit var activeMappingHolder: dev.cannoli.scorza.input.runtime.ActiveMappingHolder
     @Inject lateinit var controllersViewModel: dev.cannoli.scorza.ui.viewmodel.ControllersViewModel
     @Inject lateinit var bindingController: dev.cannoli.scorza.input.BindingController
@@ -786,35 +787,10 @@ class LibretroActivity : ComponentActivity() {
 
     // --- Input ---
 
-    private var menuHeldKey = 0
-
     private val triggerL2HeldDevices = mutableSetOf<Int>()
     private val triggerR2HeldDevices = mutableSetOf<Int>()
     private val portConsumedKeys = Array(LibretroRunner.MAX_PORTS) { mutableSetOf<Int>() }
     private val portPressedKeys = Array(LibretroRunner.MAX_PORTS) { mutableSetOf<Int>() }
-    private val menuRepeatHandler = Handler(Looper.getMainLooper())
-    private val menuRepeatDelay = 280L
-    private val menuRepeatInterval = 80L
-    private val menuRepeatRunnable = object : Runnable {
-        override fun run() {
-            if (menuHeldKey != 0 && screenStack.isNotEmpty()) {
-                fireMenuNavForKey(menuHeldKey)
-                menuRepeatHandler.postDelayed(this, menuRepeatInterval)
-            }
-        }
-    }
-
-    private fun fireMenuNavForKey(keyCode: Int) {
-        // Bypass keycode synthesis (deviceId would be virtual and the dispatcher would skip it).
-        // Calling the wired callback directly routes through the current screen handler in the
-        // registry.
-        when (keyCode) {
-            KeyEvent.KEYCODE_DPAD_UP -> inputDispatcher.onUp()
-            KeyEvent.KEYCODE_DPAD_DOWN -> inputDispatcher.onDown()
-            KeyEvent.KEYCODE_DPAD_LEFT -> inputDispatcher.onLeft()
-            KeyEvent.KEYCODE_DPAD_RIGHT -> inputDispatcher.onRight()
-        }
-    }
 
     private fun handleMenuMotion(event: android.view.MotionEvent) {
         // Route through the dispatcher first so the evaluator can react to Hat bindings (e.g.
@@ -823,25 +799,14 @@ class LibretroActivity : ComponentActivity() {
         // MenuNavigationPoller drives auto-repeat. Stick fallback below covers devices whose
         // mapping doesn't bind sticks as canonical navigation.
         if (::inputDispatcher.isInitialized) inputDispatcher.handleMotionEvent(event)
+        if (::stickAutoRepeat.isInitialized) stickAutoRepeat.handleMotion(event)
 
-        val stickX = event.getAxisValue(android.view.MotionEvent.AXIS_X)
-        val stickY = event.getAxisValue(android.view.MotionEvent.AXIS_Y)
-        val key = when {
-            stickY < -0.5f -> KeyEvent.KEYCODE_DPAD_UP
-            stickY > 0.5f -> KeyEvent.KEYCODE_DPAD_DOWN
-            stickX < -0.5f -> KeyEvent.KEYCODE_DPAD_LEFT
-            stickX > 0.5f -> KeyEvent.KEYCODE_DPAD_RIGHT
-            else -> 0
-        }
-        if (key != menuHeldKey) {
-            menuRepeatHandler.removeCallbacks(menuRepeatRunnable)
-            menuHeldKey = key
-            if (key != 0) {
-                fireMenuNavForKey(key)
-                if (currentScreen !is IGMScreen.Guide) {
-                    menuRepeatHandler.postDelayed(menuRepeatRunnable, menuRepeatDelay)
-                }
-            } else if (currentScreen is IGMScreen.Guide) {
+        // Guide-screen special case: it owns its own continuous scroll mechanism (guideScrollDir
+        // polled from a separate runnable). Reset it when the stick returns to neutral.
+        if (currentScreen is IGMScreen.Guide) {
+            val stickX = event.getAxisValue(android.view.MotionEvent.AXIS_X)
+            val stickY = event.getAxisValue(android.view.MotionEvent.AXIS_Y)
+            if (kotlin.math.abs(stickX) < 0.5f && kotlin.math.abs(stickY) < 0.5f) {
                 guideScrollDir = 0
                 guideScrollXDir = 0
             }
@@ -1355,8 +1320,7 @@ class LibretroActivity : ComponentActivity() {
 
     private fun closeAll() {
         screenStack.clear()
-        menuRepeatHandler.removeCallbacks(menuRepeatRunnable)
-        menuHeldKey = 0
+        if (::stickAutoRepeat.isInitialized) stickAutoRepeat.stop()
         for (set in portPressedKeys) set.clear()
         triggerL2HeldDevices.clear()
         triggerR2HeldDevices.clear()
@@ -2612,10 +2576,8 @@ class LibretroActivity : ComponentActivity() {
         if (!loading && !cleaned && sramPath.isNotEmpty()) { File(sramPath).parentFile?.mkdirs(); runner.saveSRAM(sramPath) }
         if (::menuNavigationPoller.isInitialized) menuNavigationPoller.stop()
         // Cancel any in-flight stick auto-repeat so it does not keep firing dispatcher callbacks
-        // after MainActivity has rewired them. menuHeldKey reset so the next resume reads a
-        // fresh direction transition.
-        menuRepeatHandler.removeCallbacks(menuRepeatRunnable)
-        menuHeldKey = 0
+        // after MainActivity has rewired them.
+        if (::stickAutoRepeat.isInitialized) stickAutoRepeat.stop()
         if (::controllerBridge.isInitialized) {
             controllerBridge.onDeviceAdded = null
             controllerBridge.onDeviceRemoved = null
