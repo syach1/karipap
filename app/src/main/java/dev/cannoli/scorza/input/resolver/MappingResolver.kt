@@ -14,7 +14,7 @@ data class ResolvedMapping(
 
 class MappingResolver(
     private val repository: MappingRepository,
-    private val bundledRetroArchEntries: List<RetroArchCfgEntry>,
+    private val bundledRetroArchEntries: dev.cannoli.scorza.input.autoconfig.BundledAutoconfigEntries,
     private val hints: ControllerHintTable,
     private val mappingsDir: File? = null,
 ) {
@@ -68,7 +68,7 @@ class MappingResolver(
         var nameAndVidPid: RetroArchCfgEntry? = null
         var nameOnly: RetroArchCfgEntry? = null
         var vidPidOnly: RetroArchCfgEntry? = null
-        for (entry in bundledRetroArchEntries) {
+        for (entry in bundledRetroArchEntries.entries()) {
             val nameMatch = entry.deviceName.isNotEmpty() && entry.deviceName == device.name
             val hasVidPid = device.vendorId != 0 && device.productId != 0 &&
                 entry.vendorId != null && entry.productId != null

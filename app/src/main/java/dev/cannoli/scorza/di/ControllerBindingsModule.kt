@@ -9,6 +9,7 @@ import dagger.hilt.components.SingletonComponent
 import dev.cannoli.scorza.config.CannoliPaths
 import dev.cannoli.scorza.input.autoconfig.AssetCfgSource
 import dev.cannoli.scorza.input.autoconfig.AutoconfigLoader
+import dev.cannoli.scorza.input.autoconfig.BundledAutoconfigEntries
 import dev.cannoli.scorza.input.autoconfig.RetroArchCfgEntry
 import dev.cannoli.scorza.input.repo.MappingRepository
 import dev.cannoli.scorza.input.resolver.MappingResolver
@@ -33,17 +34,16 @@ object ControllerBindingsModule {
 
     @Provides
     @Singleton
-    @BundledRetroArchAutoconfig
     fun provideBundledAutoconfigEntries(
         @ApplicationContext context: Context,
-    ): List<RetroArchCfgEntry> =
-        AutoconfigLoader(AssetCfgSource(context)).entries()
+    ): BundledAutoconfigEntries =
+        BundledAutoconfigEntries { AutoconfigLoader(AssetCfgSource(context)).entries() }
 
     @Provides
     @Singleton
     fun provideMappingResolver(
         repository: MappingRepository,
-        @BundledRetroArchAutoconfig bundled: List<RetroArchCfgEntry>,
+        bundled: BundledAutoconfigEntries,
         paths: CannoliPathsProvider,
         hints: dev.cannoli.scorza.input.hints.ControllerHintTable,
     ): MappingResolver = MappingResolver(
@@ -76,7 +76,7 @@ object ControllerBindingsModule {
         activeMappingHolder: ActiveMappingHolder,
         mappingRepository: MappingRepository,
         blacklist: dev.cannoli.scorza.input.ControllerBlacklist,
-        @BundledRetroArchAutoconfig bundled: List<RetroArchCfgEntry>,
+        bundled: BundledAutoconfigEntries,
         hints: dev.cannoli.scorza.input.hints.ControllerHintTable,
     ): ControllerBridge = ControllerBridge(
         resolver = resolver,

@@ -47,7 +47,12 @@ class ControllerBridgeTest {
         val hints = dev.cannoli.scorza.input.hints.ControllerHintTable.fromJson(
             """{"default":{"menuConfirm":"BTN_EAST","glyphStyle":"PLUMBER"}}"""
         )
-        return MappingResolver(repo, ra, hints, tempFolder.root)
+        return MappingResolver(
+            repo,
+            dev.cannoli.scorza.input.autoconfig.BundledAutoconfigEntries { ra },
+            hints,
+            tempFolder.root,
+        )
     }
 
     private fun makeBridge(

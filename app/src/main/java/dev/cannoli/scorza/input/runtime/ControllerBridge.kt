@@ -19,7 +19,7 @@ class ControllerBridge(
     private val activeMappingHolder: ActiveMappingHolder,
     private val mappingRepository: dev.cannoli.scorza.input.repo.MappingRepository? = null,
     private val blacklist: dev.cannoli.scorza.input.ControllerBlacklist? = null,
-    private val bundledCfgs: List<RetroArchCfgEntry> = emptyList(),
+    private val bundledCfgs: dev.cannoli.scorza.input.autoconfig.BundledAutoconfigEntries? = null,
     private val hints: ControllerHintTable? = null,
     private val clock: () -> Long = { System.currentTimeMillis() },
     private val buildModel: String = Build.MODEL ?: "",
@@ -319,7 +319,8 @@ class ControllerBridge(
         skipProductId: Int,
     ): Pair<dev.cannoli.scorza.input.hints.ControllerHint, Pair<Int, Int>>? {
         if (name.isEmpty()) return null
-        for (entry in bundledCfgs) {
+        val entries = bundledCfgs?.entries() ?: return null
+        for (entry in entries) {
             if (entry.deviceName != name) continue
             val vid = entry.vendorId ?: continue
             val pid = entry.productId ?: continue

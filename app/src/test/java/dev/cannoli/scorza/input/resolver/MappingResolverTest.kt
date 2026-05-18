@@ -40,7 +40,12 @@ class MappingResolverTest {
     private fun makeResolver(
         repo: MappingRepository,
         bundledRa: List<RetroArchCfgEntry> = emptyList(),
-    ) = MappingResolver(repo, bundledRa, defaultHints, tempFolder.root)
+    ) = MappingResolver(
+        repo,
+        dev.cannoli.scorza.input.autoconfig.BundledAutoconfigEntries { bundledRa },
+        defaultHints,
+        tempFolder.root,
+    )
 
     @Test
     fun returns_existing_on_disk_template_when_match_rule_scores_above_zero() {
