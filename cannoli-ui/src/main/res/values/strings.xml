@@ -202,7 +202,7 @@
     <string name="setting_rom_directory">ROM Directory</string>
     <string name="setting_ra_package">RetroArch Package</string>
     <string name="setting_rebuild_cache">Rebuild Cache</string>
-    <string name="setting_scan_library">Scan Library</string>
+    <string name="setting_scan_library">Scan Mode</string>
     <string name="setting_refresh_library">Refresh Library</string>
     <string name="value_automatically">Automatically</string>
     <string name="value_manually">Manually</string>
