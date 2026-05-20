@@ -10,6 +10,8 @@
 ![Fork](https://img.shields.io/badge/forked%20from-Cannoli-555555)
 ![Platform](https://img.shields.io/badge/platform-Android-555555)
 
+[![ko-fi](https://ko-fi.com/img/githubbutton_sm.svg)](https://ko-fi.com/syach1)
+
 </div>
 
 ---
@@ -79,9 +81,6 @@ Respect upstream source terms, robots.txt, rate limits, and attribution requirem
 
 Fresh setups use a Karipap root by default and ask for explicit ROM and BIOS folders.
 
-## Release Updates
-
-Karipap does not point at Cannoli's update feed. To publish update checks for your own GitHub releases, configure `UPDATE_FEED_URL` and `UPDATE_DOWNLOAD_BASE_URL` in `app/build.gradle.kts` and host a compatible `versions.json` feed.
 
 ## Credits
 
