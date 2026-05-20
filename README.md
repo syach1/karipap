@@ -1,8 +1,30 @@
+<div align="center">
+
+<img src="./karipap.png" alt="Karipap logo" width="320"/>
+
 # Karipap
 
-Karipap is an Android retro-gaming frontend forked from Cannoli.
+### A savory take on a frontend fork of Cannoli.
 
-This is a hard fork with different frontend opinions. It keeps Cannoli's Android foundation, built-in libretro direction, and external-emulator launching model, but changes the library scanner, BIOS handling, in-game menu behavior, and several UX defaults to better fit this build.
+![License](https://img.shields.io/badge/license-GPL--3.0-eac889)
+![Fork](https://img.shields.io/badge/forked%20from-Cannoli-555555)
+![Platform](https://img.shields.io/badge/platform-Android-555555)
+
+</div>
+
+---
+
+## What is Karipap?
+
+Karipap is a customized frontend based on Cannoli, adapted for my own usage, preferences, and setup.
+
+It keeps the spirit of a lightweight Android retro gaming frontend while adding my own flavor, structure, and changes.
+
+---
+
+## Credits
+
+Karipap is a modified fork of Cannoli.
 
 Upstream Cannoli:
 
@@ -55,7 +77,7 @@ Respect upstream source terms, robots.txt, rate limits, and attribution requirem
 
 ## Storage Compatibility
 
-Fresh setups use a Karipap root by default and ask for explicit ROM and BIOS folders. Legacy `Synnoli` and `Cannoli` root names remain in code only as compatibility fallbacks for existing user data and migrations; they are not presented as the new frontend identity.
+Fresh setups use a Karipap root by default and ask for explicit ROM and BIOS folders.
 
 ## Release Updates
 
