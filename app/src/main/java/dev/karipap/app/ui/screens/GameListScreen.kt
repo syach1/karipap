@@ -11,7 +11,10 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.layout.wrapContentSize
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.MaterialTheme
@@ -37,6 +40,7 @@ import androidx.compose.ui.unit.sp
 import dev.karipap.app.R
 import dev.karipap.app.model.AppType
 import dev.karipap.app.model.ListItem
+import dev.karipap.app.model.Rom
 import dev.karipap.app.settings.ArtScale
 import dev.karipap.app.ui.components.DialogOverlay
 import dev.karipap.app.ui.viewmodel.GameListViewModel
@@ -61,6 +65,7 @@ import dev.cannoli.ui.theme.Radius
 import dev.cannoli.ui.theme.Spacing
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
+import java.util.Locale
 
 private fun ListItem.rowDisplayName(showStar: Boolean): String = when (this) {
     is ListItem.RomItem -> if (showStar) "$STAR ${rom.displayName}" else rom.displayName
@@ -239,21 +244,22 @@ fun GameListScreen(
                             }
                         }
                         if (showArt) {
-                            Box(
+                            val rom = (selected as? ListItem.RomItem)?.rom
+                            Column(
                                 modifier = Modifier
                                     .fillMaxHeight()
                                     .fillMaxWidth()
                                     .padding(start = 16.dp),
-                                contentAlignment = Alignment.Center
+                                horizontalAlignment = Alignment.CenterHorizontally
                             ) {
-                                val art = selectedArt ?: return@Box
+                                val art = selectedArt ?: return@Column
                                 val artModifier: Modifier
                                 val artContentScale: ContentScale
                                 when (artScale) {
-                                    ArtScale.FIT -> { artModifier = Modifier.fillMaxSize(); artContentScale = ContentScale.Fit }
-                                    ArtScale.ORIGINAL -> { artModifier = Modifier.wrapContentSize(); artContentScale = ContentScale.None }
-                                    ArtScale.FIT_WIDTH -> { artModifier = Modifier.fillMaxWidth(); artContentScale = ContentScale.FillWidth }
-                                    ArtScale.FIT_HEIGHT -> { artModifier = Modifier.fillMaxHeight(); artContentScale = ContentScale.FillHeight }
+                                    ArtScale.FIT -> { artModifier = Modifier.fillMaxWidth().weight(0.7f); artContentScale = ContentScale.Fit }
+                                    ArtScale.ORIGINAL -> { artModifier = Modifier.wrapContentSize().weight(1f); artContentScale = ContentScale.None }
+                                    ArtScale.FIT_WIDTH -> { artModifier = Modifier.fillMaxWidth().weight(1f); artContentScale = ContentScale.FillWidth }
+                                    ArtScale.FIT_HEIGHT -> { artModifier = Modifier.fillMaxHeight().weight(1f); artContentScale = ContentScale.FillHeight }
                                 }
                                 Image(
                                     bitmap = art,
@@ -262,6 +268,9 @@ fun GameListScreen(
                                     contentScale = artContentScale,
                                     filterQuality = FilterQuality.High
                                 )
+                                if (rom != null) {
+                                    romMetadataColumn(rom, listFontSize)
+                                }
                             }
                         }
                     }
@@ -344,6 +353,62 @@ fun GameListScreen(
             listVerticalPadding = listVerticalPadding,
             buttonStyle = buttonStyle
         )
+    }
+}
+
+@Composable
+private fun romMetadataColumn(rom: Rom, listFontSize: TextUnit) {
+    Column(
+        modifier = Modifier
+            .padding(top = 8.dp)
+            .widthIn(max = 400.dp)
+    ) {
+        val metaFontSize = (listFontSize.value * 0.55f).sp
+        val metaColor = LocalCannoliColors.current.text
+        rom.description?.takeIf { it.isNotEmpty() }?.let { desc ->
+            Text(
+                text = desc,
+                style = MaterialTheme.typography.bodySmall.copy(
+                    fontSize = metaFontSize,
+                    lineHeight = (metaFontSize.value * 1.35f).sp
+                ),
+                color = metaColor,
+                maxLines = 6,
+                modifier = Modifier.padding(bottom = 4.dp)
+            )
+        }
+        rom.genre?.takeIf { it.isNotEmpty() }?.let {
+            Text(
+                text = it,
+                style = MaterialTheme.typography.bodySmall.copy(fontSize = metaFontSize),
+                color = metaColor,
+                maxLines = 1
+            )
+        }
+        listOfNotNull(
+            rom.releaseDate?.takeIf { it.isNotEmpty() },
+            rom.developer?.takeIf { it.isNotEmpty() },
+            rom.publisher?.takeIf { it.isNotEmpty() },
+            rom.players?.takeIf { it.isNotEmpty() }?.let { p ->
+                try { "${p.toInt()} players" } catch (_: Throwable) { "$p players" }
+            },
+        ).takeIf { it.isNotEmpty() }?.let { fields ->
+            Text(
+                text = fields.joinToString(" · "),
+                style = MaterialTheme.typography.bodySmall.copy(fontSize = metaFontSize),
+                color = metaColor,
+                maxLines = 2,
+                modifier = Modifier.padding(top = 2.dp)
+            )
+        }
+        rom.rating?.let {
+            Text(
+                text = "★ ${"%.1f".format(Locale.US, it * 5f)}/5",
+                style = MaterialTheme.typography.bodySmall.copy(fontSize = metaFontSize),
+                color = metaColor,
+                modifier = Modifier.padding(top = 2.dp)
+            )
+        }
     }
 }
 

@@ -109,6 +109,7 @@ class LauncherActions @Inject constructor(
     fun invalidateAllLibraryCaches() {
         artworkLookup.invalidateAll()
         arcadeTitleLookup.invalidateAll()
+        romsRepository.invalidateGamelistCache("*")
     }
 
     fun openArtworkScraper() {

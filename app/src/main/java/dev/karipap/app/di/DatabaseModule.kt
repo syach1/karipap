@@ -15,6 +15,7 @@ import dev.karipap.app.config.PlatformConfig
 import dev.karipap.app.db.RomsRepository
 import dev.karipap.app.util.ArcadeTitleLookup
 import dev.karipap.app.util.ArtworkLookup
+import dev.karipap.app.util.GamelistXmlManager
 import dev.karipap.app.util.RomDirectoryWalker
 import javax.inject.Singleton
 
@@ -32,6 +33,10 @@ object DatabaseModule {
     @Provides @Singleton
     fun provideArcadeTitleLookup(paths: CannoliPathsProvider): ArcadeTitleLookup =
         ArcadeTitleLookup(paths)
+
+    @Provides @Singleton
+    fun provideGamelistXmlManager(paths: CannoliPathsProvider): GamelistXmlManager =
+        GamelistXmlManager(paths)
 
     @Provides @Singleton
     fun provideRomDirectoryWalker(
@@ -53,7 +58,8 @@ object DatabaseModule {
         paths: CannoliPathsProvider,
         db: CannoliDatabase,
         artwork: ArtworkLookup,
-    ): RomsRepository = RomsRepository(paths, db, artwork)
+        gamelist: GamelistXmlManager,
+    ): RomsRepository = RomsRepository(paths, db, artwork, gamelist)
 
     @Provides @Singleton
     fun provideAppsRepository(db: CannoliDatabase): AppsRepository =

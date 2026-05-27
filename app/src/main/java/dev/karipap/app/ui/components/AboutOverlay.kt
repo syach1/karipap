@@ -67,8 +67,25 @@ fun AboutOverlay(statusMessage: String? = null, updateAvailable: Boolean = false
             Spacer(modifier = Modifier.height(Spacing.Lg))
 
             Text(
+                text = stringResource(R.string.about_project_url),
+                modifier = Modifier.padding(horizontal = 24.dp),
+                style = typo.bodyMedium.copy(color = Color.White, textAlign = TextAlign.Center)
+            )
+
+            Spacer(modifier = Modifier.height(Spacing.Sm))
+
+            Text(
+                text = stringResource(R.string.about_support_url),
+                modifier = Modifier.padding(horizontal = 24.dp),
+                style = typo.bodyMedium.copy(color = Color.White, textAlign = TextAlign.Center)
+            )
+
+            Spacer(modifier = Modifier.height(Spacing.Sm))
+
+            Text(
                 text = stringResource(R.string.about_website),
-                style = typo.bodyMedium.copy(color = Color.White)
+                modifier = Modifier.padding(horizontal = 24.dp),
+                style = typo.bodyMedium.copy(color = Color.White, textAlign = TextAlign.Center)
             )
 
             if (statusMessage != null) {

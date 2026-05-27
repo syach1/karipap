@@ -6,6 +6,8 @@ import dev.karipap.app.model.ListItem
 import dev.karipap.app.model.Rom
 import dev.karipap.app.di.CannoliPathsProvider
 import dev.karipap.app.util.ArtworkLookup
+import dev.karipap.app.util.GameMetadata
+import dev.karipap.app.util.GamelistXmlManager
 import dev.karipap.app.util.PlatformFolderAliases
 import org.json.JSONArray
 import java.io.File
@@ -14,6 +16,7 @@ class RomsRepository(
     private val pathsProvider: CannoliPathsProvider,
     private val db: CannoliDatabase,
     private val artwork: ArtworkLookup,
+    private val gamelist: GamelistXmlManager,
 ) {
     private val romDirectory: File get() = pathsProvider.romDir
 
@@ -88,7 +91,7 @@ class RomsRepository(
         else roms.filter { it.relativeAfterPlatform().startsWith(basePrefix) }
         return matched.partition { rom ->
             val remaining = rom.relativeAfterPlatform().removePrefix(basePrefix)
-            !remaining.contains(sep) || isSelfContainedBundle(remaining, sep)
+            !remaining.contains(sep) || isSelfContainedBundle(remaining, sep) || isHiddenContent(remaining, sep)
         }
     }
 
@@ -105,32 +108,62 @@ class RomsRepository(
         return file.substring(0, dot) == folder
     }
 
+    private fun isHiddenContent(remaining: String, sep: Char): Boolean {
+        val firstSep = remaining.indexOf(sep)
+        if (firstSep <= 0) return false
+        return remaining.substring(0, firstSep).equals("_hidden", ignoreCase = true)
+    }
+
     private fun subfolderItemsFrom(roms: List<Rom>, subfolder: String?): List<ListItem.SubfolderItem> {
         if (roms.isEmpty()) return emptyList()
         val basePrefix = if (subfolder.isNullOrEmpty()) "" else "$subfolder${File.separator}"
         val seen = linkedSetOf<String>()
         for (rom in roms) {
             val firstSeg = rom.relativeAfterPlatform().removePrefix(basePrefix).substringBefore(File.separator)
-            if (firstSeg.isNotEmpty()) seen.add(firstSeg)
+            if (firstSeg.isNotEmpty() && !firstSeg.equals("_hidden", ignoreCase = true)) seen.add(firstSeg)
         }
         return seen.map { ListItem.SubfolderItem(name = it, path = basePrefix + it) }
+    }
+
+    private val gamelistCache = java.util.concurrent.ConcurrentHashMap<String, Map<String, GameMetadata>>()
+
+    fun invalidateGamelistCache(platformTag: String) {
+        if (platformTag == "*") {
+            gamelistCache.clear()
+        } else {
+            gamelistCache.remove(platformTag.uppercase())
+        }
+    }
+
+    private fun gamelistMeta(platformTag: String): Map<String, GameMetadata> {
+        val tag = platformTag.uppercase()
+        return gamelistCache.getOrPut(tag) { gamelist.loadAll(tag) }
     }
 
     private fun rowToRom(stmt: SQLiteStatement): Rom {
         val relativePath = stmt.getText(1)
         val platformTag = stmt.getText(2)
         val absoluteFile = File(romDirectory, relativePath)
+        val basename = absoluteFile.nameWithoutExtension
         val discPaths = if (stmt.isNull(5)) null else parseDiscPaths(stmt.getText(5))
+        val meta = gamelistMeta(platformTag)[basename]
         return Rom(
             id = stmt.getLong(0),
             path = absoluteFile,
             platformTag = platformTag,
             displayName = stmt.getText(3),
             tags = if (stmt.isNull(4)) null else stmt.getText(4),
-            artFile = artwork.find(platformTag, absoluteFile.nameWithoutExtension),
+            artFile = artwork.find(platformTag, basename),
             launchTarget = LaunchTarget.RetroArch,
             discFiles = discPaths?.map { File(romDirectory, it) },
             raGameId = if (stmt.isNull(6)) null else stmt.getLong(6).toInt(),
+            description = meta?.desc,
+            rating = meta?.rating,
+            releaseDate = meta?.releaseDate,
+            developer = meta?.developer,
+            publisher = meta?.publisher,
+            genre = meta?.genre,
+            players = meta?.players,
         )
     }
 

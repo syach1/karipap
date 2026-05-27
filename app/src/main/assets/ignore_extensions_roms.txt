@@ -1,2 +1,3 @@
 .srm
 .sav
+.m3u

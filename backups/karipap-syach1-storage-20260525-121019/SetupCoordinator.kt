@@ -29,28 +29,7 @@ class SetupCoordinator @Inject constructor(
     }
 
     fun detectStorageVolumes(): List<Pair<String, String>> {
-        val volumes = linkedMapOf("Internal Storage" to "/storage/emulated/0/")
-        val seenPaths = mutableSetOf("/storage/emulated/0")
-
-        fun addVolume(label: String, path: String) {
-            val normalizedPath = path.trimEnd('/')
-            if (normalizedPath.isBlank() || normalizedPath in seenPaths) return
-
-            val dir = File(normalizedPath)
-            if (!dir.isDirectory || !dir.canRead()) return
-
-            val baseLabel = label.ifBlank { dir.name }
-            var uniqueLabel = baseLabel
-            var suffix = 2
-            while (volumes.containsKey(uniqueLabel)) {
-                uniqueLabel = "$baseLabel $suffix"
-                suffix += 1
-            }
-
-            volumes[uniqueLabel] = "$normalizedPath/"
-            seenPaths.add(normalizedPath)
-        }
-
+        val volumes = mutableListOf("Internal Storage" to "/storage/emulated/0/")
         val sm = context.getSystemService(StorageManager::class.java)
         for (sv in sm.storageVolumes) {
             if (sv.isPrimary) continue
@@ -60,18 +39,17 @@ class SetupCoordinator @Inject constructor(
                 try { sv.javaClass.getMethod("getPath").invoke(sv) as? String } catch (_: Exception) { null }
             } ?: continue
             val label = sv.getDescription(context) ?: File(path).name
-            addVolume(label, path)
+            volumes.add(label to "$path/")
         }
-
-        val storageDir = File("/storage")
-        storageDir.listFiles()?.forEach { dir ->
-            if (dir.name != "emulated" && dir.name != "self") {
-                addVolume(dir.name, dir.absolutePath)
+        if (volumes.size == 1) {
+            val storageDir = File("/storage")
+            storageDir.listFiles()?.forEach { dir ->
+                if (dir.name != "emulated" && dir.name != "self" && dir.isDirectory && dir.canRead()) {
+                    volumes.add(dir.name to dir.absolutePath + "/")
+                }
             }
         }
-        addVolume("SYACH1", "/storage/SYACH1")
-
-        return volumes.toList()
+        return volumes
     }
 
     fun listDirectories(path: String): List<String> {

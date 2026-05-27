@@ -1134,6 +1134,11 @@ Java_dev_karipap_app_libretro_LibretroRunner_nativeGetAspectRatio(JNIEnv *, jobj
     return ar;
 }
 
+JNIEXPORT jboolean JNICALL
+Java_dev_karipap_app_libretro_LibretroRunner_nativeHasDiskControl(JNIEnv *, jobject) {
+    return g_has_disk_control ? JNI_TRUE : JNI_FALSE;
+}
+
 JNIEXPORT jint JNICALL
 Java_dev_karipap_app_libretro_LibretroRunner_nativeGetDiskCount(JNIEnv *, jobject) {
     if (!g_has_disk_control || !g_disk_control.get_num_images) return 0;

@@ -6,9 +6,12 @@ import dev.karipap.app.config.PlatformConfig
 import java.io.File
 
 object DirectoryLayout {
-    fun ensure(cannoliRoot: File, romDirectory: File, assets: AssetManager, platformConfig: PlatformConfig) {
+    fun ensure(cannoliRoot: File, romDirectory: File, biosDirectory: File, assets: AssetManager, platformConfig: PlatformConfig) {
         val paths = CannoliPaths(cannoliRoot)
-        listOf(
+        val dirs = listOf(
+            cannoliRoot,
+            romDirectory,
+            biosDirectory,
             paths.artDir,
             paths.savesDir,
             paths.saveStatesDir,
@@ -21,11 +24,26 @@ object DirectoryLayout {
             paths.configOverridesCores,
             paths.configOverridesSystems,
             paths.configOverridesGames,
+            paths.configCache,
+            paths.configProfiles,
+            paths.configFonts,
+            paths.configOrdering,
+            paths.configLaunchScripts,
+            paths.toolsDir,
+            paths.portsDir,
+            paths.configRetroAchievements,
+            paths.configAssets,
             paths.configInputMappings,
+            paths.collectionsDir,
             paths.backupDir,
             paths.guidesDir,
             paths.wallpapersDir,
-        ).forEach { it.mkdirs() }
+            paths.shadersDir,
+            paths.overlaysDir,
+            paths.logsDir,
+        )
+        dirs.forEach { it.mkdirs() }
+        StoragePermissions.ensurePcWritable(cannoliRoot, romDirectory, biosDirectory)
 
         val arcadeMap = paths.arcadeMapFile
         if (!arcadeMap.exists()) {

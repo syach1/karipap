@@ -167,7 +167,24 @@ class RomDirectoryWalker(
         val entries = dir.listFiles()?.filter { !it.name.startsWith(".") && !isIgnored(it) } ?: return
         val (subdirs, files) = entries.partition { it.isDirectory }
 
+        val inHidden = relPrefix.contains("${File.separator}_hidden${File.separator}")
+
         for (subdir in subdirs) {
+            if (inHidden || subdir.name.equals("_hidden", ignoreCase = true)) {
+                if (subdir.listFiles()?.any { !it.name.startsWith(".") } == true) {
+                    scanDir(
+                        dir = subdir,
+                        relPrefix = "$relPrefix${subdir.name}${File.separator}",
+                        tag = tag,
+                        isArcade = isArcade,
+                        out = out,
+                        seen = seen,
+                        depth = depth + 1,
+                        filterByDetection = filterByDetection,
+                    )
+                }
+                continue
+            }
             val launch = findDirLaunchFile(subdir)
             val launchMatches = launch != null && (!filterByDetection || launch.discFiles?.any { matchesPlatform(it, tag) } == true || matchesPlatform(launch.file, tag))
             if (launchMatches) {

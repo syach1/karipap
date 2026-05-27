@@ -56,6 +56,8 @@ import dev.cannoli.ui.theme.hexToColor
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import java.io.File
+import java.util.concurrent.CountDownLatch
+import java.util.concurrent.TimeUnit
 import javax.inject.Inject
 
 @AndroidEntryPoint
@@ -100,6 +102,13 @@ class LibretroActivity : ComponentActivity() {
         val cb = vsyncCallback ?: return
         android.view.Choreographer.getInstance().removeFrameCallback(cb)
         vsyncCallback = null
+    }
+
+    private fun syncGlThread() {
+        val view = glSurfaceView ?: return
+        val latch = CountDownLatch(1)
+        view.queueEvent { latch.countDown() }
+        latch.await(100L, TimeUnit.MILLISECONDS)
     }
     private var loading by mutableStateOf(true)
     private var revealed by mutableStateOf(false)
@@ -290,6 +299,7 @@ class LibretroActivity : ComponentActivity() {
         portRouter.snapshotEntries().count { !it.mapping.excludeFromGameplay }
 
     private fun refreshDiskInfo() {
+        if (!runner.hasDiskControl()) return
         diskCount = runner.getDiskCount()
         currentDiskIndex = runner.getDiskIndex()
         if (diskCount > 1) {
@@ -1335,7 +1345,9 @@ class LibretroActivity : ComponentActivity() {
                     showOsd("Reset", OsdPosition.BottomCenter)
                 }
                 ShortcutAction.SAVE_AND_QUIT -> {
+                    stopVsyncPacer()
                     renderer.paused = true
+                    syncGlThread()
                     runner.pauseAudio()
                     if (stateBasePath.isNotEmpty()) slotManager.saveState(runner, slotManager.slots[0])
                     quit()
@@ -1368,9 +1380,10 @@ class LibretroActivity : ComponentActivity() {
                 ShortcutAction.OPEN_GUIDE -> {
                     val guides = guideManager.findGuides()
                     if (guides.isNotEmpty()) {
-                        renderer.paused = true
-                        runner.pauseAudio()
                         stopVsyncPacer()
+                        renderer.paused = true
+                        syncGlThread()
+                        runner.pauseAudio()
                         startRaPausedIdle()
                         screenStack.clear()
                         guideFiles = guides
@@ -1399,12 +1412,16 @@ class LibretroActivity : ComponentActivity() {
         guideFiles = guideManager.findGuides()
         screenStack.clear()
         push(IGMScreen.Menu())
-        renderer.paused = true
-        runner.pauseAudio()
         stopVsyncPacer()
+        renderer.paused = true
+        syncGlThread()
+        runner.pauseAudio()
         startRaPausedIdle()
         refreshSlotInfo()
-        refreshDiskInfo()
+        if (diskCount == 0 && runner.hasDiskControl()) {
+            diskCount = 1
+            currentDiskIndex = 0
+        }
     }
 
     private fun closeAll() {
@@ -1441,9 +1458,19 @@ class LibretroActivity : ComponentActivity() {
 
     private fun cycleDisc(direction: Int) {
         val newIndex = ((currentDiskIndex + direction) + diskCount) % diskCount
-        if (newIndex != currentDiskIndex && runner.setDiskIndex(newIndex)) {
-            currentDiskIndex = newIndex
-            showOsd("Switched to ${diskLabel(currentDiskIndex)}", OsdPosition.TopCenter)
+        if (newIndex != currentDiskIndex) {
+            val view = glSurfaceView ?: return
+            val latch = CountDownLatch(1)
+            var ok = false
+            view.queueEvent {
+                ok = runner.setDiskIndex(newIndex)
+                latch.countDown()
+            }
+            latch.await(200L, TimeUnit.MILLISECONDS)
+            if (ok) {
+                currentDiskIndex = newIndex
+                showOsd("Switched to ${diskLabel(currentDiskIndex)}", OsdPosition.TopCenter)
+            }
         }
     }
 

@@ -34,8 +34,8 @@ android {
         applicationId = "dev.karipap.app"
         minSdk = 28
         targetSdk = 36
-        versionCode = 1080007
-        versionName = "1.0.4-RC1"
+        versionCode = 1060006
+        versionName = "1.0.1-RC1"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
 

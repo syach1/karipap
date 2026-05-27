@@ -1,3 +1,5 @@
 <resources>
     <string name="app_name" translatable="false">Karipap</string>
+    <string name="about_project_url" translatable="false">GitHub: https://github.com/syach1/karipap/</string>
+    <string name="about_support_url" translatable="false">Ko-fi: https://ko-fi.com/syach1</string>
 </resources>

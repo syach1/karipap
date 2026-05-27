@@ -211,9 +211,13 @@
     <string name="artwork_scraper_scanning">Scanning ROM directory...</string>
     <string name="artwork_scraper_empty">No ROMs found</string>
     <string name="artwork_scraper_cache_note">Cache covers locally</string>
-    <string name="artwork_source_libretro">Try Libretro thumbnails</string>
-    <string name="artwork_source_thegamesdb">Try TheGamesDB API</string>
-    <string name="artwork_source_dsess">Try DSESS-style HTML selector scraper</string>
+    <string name="artwork_source_screenscraper">ScreenScraper.fr</string>
+    <string name="artwork_source_screenscraper_nodesc">ScreenScraper.fr</string>
+    <string name="artwork_source_with_description">With Description</string>
+    <string name="artwork_source_no_description">No Description</string>
+    <string name="artwork_source_libretro">Libretro thumbnails</string>
+    <string name="artwork_source_daijisho">Daijisho sources</string>
+    <string name="artwork_source_thegamesdb">TheGamesDB API</string>
     <string name="value_automatically">Automatically</string>
     <string name="value_manually">Manually</string>
     <string name="setting_ra_username">Username</string>

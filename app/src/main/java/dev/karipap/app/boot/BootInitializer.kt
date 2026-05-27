@@ -65,17 +65,23 @@ class BootInitializer @Inject constructor(
     suspend fun run(onPhase: (BootPhase, Float, String) -> Unit): BootResult {
         val root = cannoliPaths.root
         val romDir = cannoliPaths.romDir
+        val biosDir = cannoliPaths.biosDir
         val importPhase = if (hasLegacyData(root)) BootPhase.IMPORT else BootPhase.INITIAL_SCAN
         onPhase(BootPhase.LIBRARY_REFRESH, 0f, "Preparing")
 
+        withContext(Dispatchers.IO) {
+            dev.karipap.app.util.StoragePermissions.ensurePcWritable(root, romDir, biosDir)
+        }
         ScanLog.init(root.absolutePath)
         dev.karipap.app.util.InputLog.init(root.absolutePath)
         platformConfig.load()
+        withContext(Dispatchers.IO) {
+            dev.karipap.app.util.DirectoryLayout.ensure(root, romDir, biosDir, context.assets, platformConfig)
+        }
         ioScope.launch {
             launchManager.syncRetroArchAssets(root)
             launchManager.syncRetroArchConfig(root)
         }
-        ioScope.launch { dev.karipap.app.util.DirectoryLayout.ensure(root, romDir, context.assets, platformConfig) }
 
         val importer = Importer(
             cannoliRoot = root,

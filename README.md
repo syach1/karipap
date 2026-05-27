@@ -46,6 +46,7 @@ Upstream Cannoli:
 
 - Added a separate `BIOS Directory` setting under Library.
 - First-run setup now lets the user choose ROM and BIOS directories instead of silently assuming pre-made folders.
+- First-run setup and boot create the selected Karipap root, ROM directory, and BIOS directory, and attempt to mark those folders PC-writable where the storage filesystem allows it.
 - Built-in libretro BIOS lookup now scans the selected BIOS folder and its subfolders.
 - Firmware is staged into the app cache using core-declared BIOS names so cores can find files even when the user's folder layout or file casing differs.
 - Built-in libretro JNI exports now match the Karipap package namespace.

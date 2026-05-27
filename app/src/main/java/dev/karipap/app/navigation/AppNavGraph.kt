@@ -861,8 +861,7 @@ fun AppNavGraph(
                         scrollTarget = currentScreen.scrollTarget,
                         onListStateChanged = onListStateChanged
                     ) { _, source, isSelected ->
-                        val value = if (source == ArtworkScraperSource.LIBRETRO)
-                            stringResource(R.string.artwork_scraper_cache_note) else ""
+                        val value = source.cacheNoteRes?.let { stringResource(it) } ?: ""
                         if (value.isEmpty()) {
                             PillRowText(
                                 label = stringResource(source.labelRes),

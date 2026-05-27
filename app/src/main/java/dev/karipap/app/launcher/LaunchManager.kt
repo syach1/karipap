@@ -500,8 +500,10 @@ class LaunchManager(
         context.startActivity(intent, opts)
     }
 
-    private fun normalizedRomName(rom: Rom): String =
-        Normalizer.normalize(rom.path.nameWithoutExtension, Normalizer.Form.NFC)
+    private fun normalizedRomName(rom: Rom): String {
+        val raw = Normalizer.normalize(rom.path.nameWithoutExtension, Normalizer.Form.NFC)
+        return if (rom.discFiles != null) DISC_REGEX.replace(raw, "").trim() else raw
+    }
 
     private fun buildIGMExtras(rom: Rom): IGMExtras {
         val paths = CannoliPaths(settings.sdCardRoot)

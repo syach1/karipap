@@ -11,6 +11,8 @@ import dev.karipap.app.navigation.OnboardingPermission
 import dev.karipap.app.settings.SettingsRepository
 import dev.karipap.app.setup.SetupCoordinator
 import dev.karipap.app.ui.screens.DialogState
+import dev.karipap.app.util.StoragePermissions
+import java.io.File
 import javax.inject.Inject
 
 @ActivityScoped
@@ -173,10 +175,13 @@ class OnboardingInputHandler @Inject constructor(
     override fun onStart() {
         val screen = nav.currentScreen as? LauncherScreen.OnboardingPermissions ?: return
         val target = screen.targetPath ?: return
+        val romDirectory = screen.effectiveRomDirectory ?: ""
+        val biosDirectory = screen.effectiveBiosDirectory ?: ""
+        createInitialDirectories(target, romDirectory, biosDirectory)
         settings.sdCardRoot = target
         settings.setupCompleted = true
-        settings.romDirectory = screen.effectiveRomDirectory ?: ""
-        settings.biosDirectory = screen.effectiveBiosDirectory ?: ""
+        settings.romDirectory = romDirectory
+        settings.biosDirectory = biosDirectory
         settings.flush()
         launcherActions.invalidateAllLibraryCaches()
         onFolderChosen?.invoke(target)
@@ -198,4 +203,16 @@ class OnboardingInputHandler @Inject constructor(
 
     private fun normalizeDirectory(path: String): String =
         if (path == "/storage/") path else path.trimEnd('/')
+
+    private fun createInitialDirectories(rootPath: String, romDirectory: String, biosDirectory: String) {
+        try {
+            val dirs = buildList {
+                add(File(rootPath))
+                if (romDirectory.isNotBlank()) add(File(romDirectory))
+                if (biosDirectory.isNotBlank()) add(File(biosDirectory))
+            }
+            StoragePermissions.ensurePcWritable(*dirs.toTypedArray())
+        } catch (_: SecurityException) {
+        }
+    }
 }
