@@ -112,7 +112,7 @@ jobs:
         run: |
           SHORT_SHA=$(git rev-parse --short HEAD)
           echo "tag=v${{ inputs.version }}" >> "$GITHUB_OUTPUT"
-          echo "apk_name=cannoli-${{ inputs.version }}-${SHORT_SHA}.apk" >> "$GITHUB_OUTPUT"
+          echo "apk_name=karipap-${{ inputs.version }}-${SHORT_SHA}.apk" >> "$GITHUB_OUTPUT"
 
       - name: Rename APK
         run: |
