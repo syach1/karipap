@@ -16,6 +16,12 @@ extern "C" {
 #define RETRO_PIXEL_FORMAT_XRGB8888 1
 #define RETRO_PIXEL_FORMAT_RGB565   2
 
+// Audio/video enable flags
+#define RETRO_AV_ENABLE_VIDEO 1
+#define RETRO_AV_ENABLE_AUDIO 2
+#define RETRO_AV_ENABLE_FAST_SAVESTATES 4
+#define RETRO_AV_ENABLE_HARD_DISABLE_AUDIO 8
+
 // Device types
 #define RETRO_DEVICE_NONE    0
 #define RETRO_DEVICE_JOYPAD  1
@@ -54,6 +60,7 @@ extern "C" {
 // Environment callback commands
 #define RETRO_ENVIRONMENT_GET_OVERSCAN           2
 #define RETRO_ENVIRONMENT_GET_CAN_DUPE           3
+#define RETRO_ENVIRONMENT_SET_PERFORMANCE_LEVEL  8
 #define RETRO_ENVIRONMENT_SET_PIXEL_FORMAT       10
 #define RETRO_ENVIRONMENT_SET_INPUT_DESCRIPTORS  11
 #define RETRO_ENVIRONMENT_SET_DISK_CONTROL_INTERFACE     13
@@ -61,7 +68,8 @@ extern "C" {
 #define RETRO_ENVIRONMENT_SET_VARIABLES          16
 #define RETRO_ENVIRONMENT_GET_VARIABLE_UPDATE    17
 #define RETRO_ENVIRONMENT_SET_SUPPORT_NO_GAME    18
-#define RETRO_ENVIRONMENT_SET_VARIABLE           21
+#define RETRO_ENVIRONMENT_SET_FRAME_TIME_CALLBACK 21
+#define RETRO_ENVIRONMENT_SET_AUDIO_CALLBACK     22
 #define RETRO_ENVIRONMENT_GET_RUMBLE_INTERFACE   23
 #define RETRO_ENVIRONMENT_GET_LOG_INTERFACE      27
 #define RETRO_ENVIRONMENT_GET_SAVE_DIRECTORY     31
@@ -71,14 +79,27 @@ extern "C" {
 #define RETRO_DEVICE_ID_JOYPAD_MASK  256
 #define RETRO_ENVIRONMENT_SET_GEOMETRY           37
 #define RETRO_ENVIRONMENT_GET_LANGUAGE           39
+#define RETRO_ENVIRONMENT_SET_SERIALIZATION_QUIRKS 44
+#define RETRO_ENVIRONMENT_GET_VFS_INTERFACE      45
+#define RETRO_ENVIRONMENT_GET_LED_INTERFACE      46
+#define RETRO_ENVIRONMENT_GET_AUDIO_VIDEO_ENABLE 47
+#define RETRO_ENVIRONMENT_GET_FASTFORWARDING     49
 #define RETRO_ENVIRONMENT_GET_SYSTEM_DIRECTORY   9
 #define RETRO_ENVIRONMENT_GET_INPUT_BITMASKS     51
 #define RETRO_ENVIRONMENT_GET_CORE_OPTIONS_VERSION 52
 #define RETRO_ENVIRONMENT_SET_CORE_OPTIONS           53
 #define RETRO_ENVIRONMENT_SET_CORE_OPTIONS_INTL      54
+#define RETRO_ENVIRONMENT_SET_CORE_OPTIONS_DISPLAY   55
+#define RETRO_ENVIRONMENT_GET_DISK_CONTROL_INTERFACE_VERSION 57
+#define RETRO_ENVIRONMENT_SET_DISK_CONTROL_EXT_INTERFACE_CURRENT 58
+#define RETRO_ENVIRONMENT_GET_INPUT_MAX_USERS    61
+#define RETRO_ENVIRONMENT_SET_AUDIO_BUFFER_STATUS_CALLBACK 62
+#define RETRO_ENVIRONMENT_SET_MINIMUM_AUDIO_LATENCY 63
+#define RETRO_ENVIRONMENT_GET_GAME_INFO_EXT      66
 #define RETRO_ENVIRONMENT_SET_CORE_OPTIONS_V2        67
 #define RETRO_ENVIRONMENT_SET_CORE_OPTIONS_V2_INTL  68
 #define RETRO_ENVIRONMENT_SET_CORE_OPTIONS_UPDATE_DISPLAY_CALLBACK 69
+#define RETRO_ENVIRONMENT_SET_VARIABLE           70
 #define RETRO_ENVIRONMENT_SET_DISK_CONTROL_EXT_INTERFACE 65
 
 // Log levels
@@ -178,6 +199,20 @@ struct retro_game_info {
     const char *meta;
 };
 
+struct retro_game_info_ext {
+    const char *full_path;
+    const char *archive_path;
+    const char *archive_file;
+    const char *dir;
+    const char *name;
+    const char *ext;
+    const char *meta;
+    const void *data;
+    size_t size;
+    bool file_in_archive;
+    bool persistent_data;
+};
+
 // Controller info
 struct retro_controller_description {
     const char *desc;
@@ -196,6 +231,14 @@ typedef void (*retro_audio_sample_t)(int16_t left, int16_t right);
 typedef size_t (*retro_audio_sample_batch_t)(const int16_t *data, size_t frames);
 typedef void (*retro_input_poll_t)(void);
 typedef int16_t (*retro_input_state_t)(unsigned port, unsigned device, unsigned index, unsigned id);
+
+typedef int64_t retro_usec_t;
+typedef void (*retro_frame_time_callback_t)(retro_usec_t usec);
+
+struct retro_frame_time_callback {
+    retro_frame_time_callback_t callback;
+    retro_usec_t reference;
+};
 
 // Core API function typedefs
 typedef void (*retro_set_environment_t)(retro_environment_t);
@@ -242,6 +285,51 @@ struct retro_disk_control_ext_callback {
     bool (*set_initial_image)(unsigned index, const char *path);
     const char *(*get_image_path)(unsigned index);
     const char *(*get_image_label)(unsigned index);
+};
+
+// VFS interface
+struct retro_vfs_file_handle;
+struct retro_vfs_dir_handle;
+
+#define RETRO_VFS_FILE_ACCESS_READ            (1 << 0)
+#define RETRO_VFS_FILE_ACCESS_WRITE           (1 << 1)
+#define RETRO_VFS_FILE_ACCESS_READ_WRITE      (RETRO_VFS_FILE_ACCESS_READ | RETRO_VFS_FILE_ACCESS_WRITE)
+#define RETRO_VFS_FILE_ACCESS_UPDATE_EXISTING (1 << 2)
+
+#define RETRO_VFS_SEEK_POSITION_START    0
+#define RETRO_VFS_SEEK_POSITION_CURRENT  1
+#define RETRO_VFS_SEEK_POSITION_END      2
+
+#define RETRO_VFS_STAT_IS_VALID             (1 << 0)
+#define RETRO_VFS_STAT_IS_DIRECTORY         (1 << 1)
+#define RETRO_VFS_STAT_IS_CHARACTER_SPECIAL (1 << 2)
+
+struct retro_vfs_interface {
+    const char *(*get_path)(struct retro_vfs_file_handle *stream);
+    struct retro_vfs_file_handle *(*open)(const char *path, unsigned mode, unsigned hints);
+    int (*close)(struct retro_vfs_file_handle *stream);
+    int64_t (*size)(struct retro_vfs_file_handle *stream);
+    int64_t (*tell)(struct retro_vfs_file_handle *stream);
+    int64_t (*seek)(struct retro_vfs_file_handle *stream, int64_t offset, int seek_position);
+    int64_t (*read)(struct retro_vfs_file_handle *stream, void *s, uint64_t len);
+    int64_t (*write)(struct retro_vfs_file_handle *stream, const void *s, uint64_t len);
+    int (*flush)(struct retro_vfs_file_handle *stream);
+    int (*remove)(const char *path);
+    int (*rename)(const char *old_path, const char *new_path);
+    int64_t (*truncate)(struct retro_vfs_file_handle *stream, int64_t length);
+    int (*stat)(const char *path, int32_t *size);
+    int (*mkdir)(const char *dir);
+    struct retro_vfs_dir_handle *(*opendir)(const char *dir, bool include_hidden);
+    bool (*readdir)(struct retro_vfs_dir_handle *dirstream);
+    const char *(*dirent_get_name)(struct retro_vfs_dir_handle *dirstream);
+    bool (*dirent_is_dir)(struct retro_vfs_dir_handle *dirstream);
+    int (*closedir)(struct retro_vfs_dir_handle *dirstream);
+    int (*stat_64)(const char *path, int64_t *size);
+};
+
+struct retro_vfs_interface_info {
+    uint32_t required_interface_version;
+    struct retro_vfs_interface *iface;
 };
 
 // Memory types

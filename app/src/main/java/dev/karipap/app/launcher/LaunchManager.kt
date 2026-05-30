@@ -229,9 +229,9 @@ class LaunchManager(
         return m3uFile
     }
 
-    fun resolveLaunchFile(rom: Rom): File? {
+    fun resolveLaunchFile(rom: Rom, extractArchives: Boolean = true): File? {
         if (rom.discFiles != null) return createFallbackM3u(rom)
-        if (ArchiveExtractor.isArchive(rom.path) && !platformConfig.isArcade(rom.platformTag)) {
+        if (extractArchives && ArchiveExtractor.isArchive(rom.path) && !platformConfig.isArcade(rom.platformTag)) {
             return ArchiveExtractor.extract(rom.path, context.cacheDir)
         }
         return rom.path
@@ -250,8 +250,10 @@ class LaunchManager(
         if (target is LaunchTarget.Embedded) return target.corePath
         if (target !is LaunchTarget.RetroArch) return null
         val core = gameOverride?.coreId ?: platformConfig.getCoreName(rom.platformTag) ?: return null
-        val runnerPref = gameOverride?.runner ?: platformConfig.getRunnerPreference(rom.platformTag)
-        if (runnerPref == "RetroArch" || runnerPref == "RicottaArch") return null
+        val mappedRaPackage = gameOverride?.raPackage ?: platformConfig.getPackage(rom.platformTag)
+        val runnerPref = PlatformConfig.normalizeRunnerLabel(gameOverride?.runner ?: platformConfig.getRunnerPreference(rom.platformTag))
+            ?: mappedRaPackage?.let { PlatformConfig.normalizeRunnerLabel(InstalledCoreService.getPackageLabel(it)) }
+        if (PlatformConfig.isRetroArchRunner(runnerPref)) return null
         return findEmbeddedCore(core)
     }
 
@@ -291,18 +293,20 @@ class LaunchManager(
         debugLog("launchRom entered: ${rom.platformTag} / ${rom.path.name} target=${rom.launchTarget::class.simpleName}")
         if (launching) return null
         launching = true
-        val launchFile = resolveLaunchFile(rom)
-            ?: return errorAndReset(DialogState.LaunchError("Failed to extract archive"))
 
         val gameOverride = platformConfig.getGameOverride(rom.path.absolutePath)
         if (gameOverride?.appPackage != null) {
+            val launchFile = resolveLaunchFile(rom, extractArchives = true)
+                ?: return errorAndReset(DialogState.LaunchError("Failed to extract archive"))
             val cfg = platformConfig.getAppConfig(rom.platformTag, gameOverride.appPackage)
             return launchResultDialog(apkLauncher.launchWithRom(gameOverride.appPackage, launchFile, cfg))
         }
 
         val result = when (val target = rom.launchTarget) {
             is LaunchTarget.RetroArch -> {
-                var runnerPref = gameOverride?.runner ?: platformConfig.getRunnerPreference(rom.platformTag)
+                val mappedRaPackage = gameOverride?.raPackage ?: platformConfig.getPackage(rom.platformTag)
+                var runnerPref = PlatformConfig.normalizeRunnerLabel(gameOverride?.runner ?: platformConfig.getRunnerPreference(rom.platformTag))
+                    ?: mappedRaPackage?.let { PlatformConfig.normalizeRunnerLabel(InstalledCoreService.getPackageLabel(it)) }
                 if (runnerPref == null) {
                     val core = gameOverride?.coreId ?: platformConfig.getCoreName(rom.platformTag)
                     val embeddedAvailable = core?.let { findEmbeddedCore(it) != null } ?: false
@@ -312,7 +316,9 @@ class LaunchManager(
                         runnerPref = "Standalone"
                     }
                 }
-                if (runnerPref == "App" || runnerPref == "Standalone") {
+                if (runnerPref == "Standalone") {
+                    val launchFile = resolveLaunchFile(rom, extractArchives = true)
+                        ?: return errorAndReset(DialogState.LaunchError("Failed to extract archive"))
                     val cfg = platformConfig.getFirstInstalledApp(rom.platformTag, context.packageManager)
                         ?: platformConfig.getAppPackage(rom.platformTag)?.let { platformConfig.getAppConfig(rom.platformTag, it) }
                     if (cfg != null) {
@@ -323,17 +329,17 @@ class LaunchManager(
                 } else {
                     val core = gameOverride?.coreId ?: platformConfig.getCoreName(rom.platformTag)
                     if (core != null) {
-                        if (runnerPref != "RetroArch" && runnerPref != "RicottaArch") {
+                        if (!PlatformConfig.isRetroArchRunner(runnerPref)) {
                             val embeddedCorePath = findEmbeddedCore(core)
                             debugLog("RetroArch target: core=$core runnerPref=$runnerPref embeddedCorePath=$embeddedCorePath")
                             if (embeddedCorePath != null) {
-                                launchEmbedded(rom.copy(path = launchFile), embeddedCorePath, originalRomPath = rom.path.absolutePath)
-                                return null
+                                val launchFile = resolveLaunchFile(rom, extractArchives = true)
+                                    ?: return errorAndReset(DialogState.LaunchError("Failed to extract archive"))
+                                return launchEmbedded(rom.copy(path = launchFile), embeddedCorePath, originalRomPath = rom.path.absolutePath)
                             }
                         }
-                        val raPackage = gameOverride?.raPackage
-                            ?: platformConfig.getPackage(rom.platformTag)
-                        if (raPackage != null && installedCoreService != null) {
+                        val raPackage = mappedRaPackage ?: settings.retroArchPackage
+                        if (installedCoreService != null) {
                             if (!context.isPackageInstalled(raPackage)) {
                                 val appName = try {
                                     val info = context.packageManager.getApplicationInfo(raPackage, 0)
@@ -348,6 +354,8 @@ class LaunchManager(
                                 return errorAndReset(DialogState.MissingCore("$core not found in $label"))
                             }
                         }
+                        val launchFile = resolveLaunchFile(rom, extractArchives = false)
+                            ?: return errorAndReset(DialogState.LaunchError("Failed to prepare ROM"))
                         if (settings.retroArchDiyMode) {
                             val raConfig = "/storage/emulated/0/Android/data/$raPackage/files/retroarch.cfg"
                             retroArchLauncher.launch(launchFile, core, raConfig, raPackage, buildIGMExtras(rom))
@@ -362,9 +370,13 @@ class LaunchManager(
                 }
             }
             is LaunchTarget.EmuLaunch -> {
+                val launchFile = resolveLaunchFile(rom, extractArchives = true)
+                    ?: return errorAndReset(DialogState.LaunchError("Failed to extract archive"))
                 emuLauncher.launch(launchFile, target.packageName, target.activityName, target.action)
             }
             is LaunchTarget.ApkLaunch -> {
+                val launchFile = resolveLaunchFile(rom, extractArchives = true)
+                    ?: return errorAndReset(DialogState.LaunchError("Failed to extract archive"))
                 val pkg = if (context.isPackageInstalled(target.packageName)) {
                     target.packageName
                 } else {
@@ -379,8 +391,9 @@ class LaunchManager(
                 }
             }
             is LaunchTarget.Embedded -> {
-                launchEmbedded(rom.copy(path = launchFile), target.corePath, originalRomPath = rom.path.absolutePath)
-                return null
+                val launchFile = resolveLaunchFile(rom, extractArchives = true)
+                    ?: return errorAndReset(DialogState.LaunchError("Failed to extract archive"))
+                return launchEmbedded(rom.copy(path = launchFile), target.corePath, originalRomPath = rom.path.absolutePath)
             }
         }
 
@@ -399,15 +412,15 @@ class LaunchManager(
         if (launching) return null
         launching = true
         val resumeSlot = findMostRecentSlot(rom) ?: 0
-        val launchFile = resolveLaunchFile(rom) ?: run { launching = false; return null }
         val embeddedCorePath = getEmbeddedCorePath(rom)
         if (embeddedCorePath != null) {
-            launchEmbedded(rom.copy(path = launchFile), embeddedCorePath, resumeSlot, originalRomPath = rom.path.absolutePath)
-            return null
+            val launchFile = resolveLaunchFile(rom, extractArchives = true) ?: run { launching = false; return null }
+            return launchEmbedded(rom.copy(path = launchFile), embeddedCorePath, resumeSlot, originalRomPath = rom.path.absolutePath)
         }
         val gameOverride = platformConfig.getGameOverride(rom.path.absolutePath)
         val core = gameOverride?.coreId ?: platformConfig.getCoreName(rom.platformTag) ?: run { launching = false; return null }
-        val raPackage = gameOverride?.raPackage ?: platformConfig.getPackage(rom.platformTag)
+        val raPackage = gameOverride?.raPackage ?: platformConfig.getPackage(rom.platformTag) ?: settings.retroArchPackage
+        val launchFile = resolveLaunchFile(rom, extractArchives = false) ?: run { launching = false; return null }
         if (settings.retroArchDiyMode) {
             val raConfig = "/storage/emulated/0/Android/data/$raPackage/files/retroarch.cfg"
             retroArchLauncher.launch(launchFile, core, raConfig, raPackage)
@@ -457,7 +470,7 @@ class LaunchManager(
         } catch (_: Exception) {}
     }
 
-    fun launchEmbedded(rom: Rom, corePath: String, resumeSlot: Int = -1, originalRomPath: String? = null) {
+    fun launchEmbedded(rom: Rom, corePath: String, resumeSlot: Int = -1, originalRomPath: String? = null): DialogState? {
         val paths = CannoliPaths(settings.sdCardRoot)
         val romName = normalizedRomName(rom)
         val saveDir = paths.savesFor(rom.platformTag)
@@ -466,6 +479,7 @@ class LaunchManager(
         stateDir.mkdirs()
         val coreId = File(corePath).name.removeSuffix("_android.so")
         val systemDir = prepareLibretroSystemDir(paths, coreId)
+        validateEmbeddedFirmware(rom, coreId, systemDir)?.let { return errorAndReset(it) }
 
         val args = LaunchArgs(
             gameTitle = rom.displayName,
@@ -498,6 +512,53 @@ class LaunchManager(
             .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
         val opts = ActivityOptions.makeCustomAnimation(context, 0, 0).toBundle()
         context.startActivity(intent, opts)
+        return null
+    }
+
+    private fun validateEmbeddedFirmware(rom: Rom, coreId: String, systemDir: File): DialogState? {
+        if (rom.platformTag.uppercase() != "SEGACD") return null
+        if (coreId != "genesis_plus_gx_libretro" && coreId != "picodrive_libretro") return null
+
+        val biosName = segaCdBiosNameFor(rom.path.name)
+        val biosFile = File(systemDir, biosName)
+        if (!biosFile.isFile) {
+            return DialogState.LaunchError("Missing Sega CD BIOS: $biosName. Put a valid BIOS in the BIOS Directory and refresh/launch again.")
+        }
+
+        val hash = md5Hex(biosFile) ?: return DialogState.LaunchError("Could not read Sega CD BIOS: $biosName")
+        val allowed = SEGACD_BIOS_MD5[biosName.lowercase()].orEmpty()
+        if (allowed.isNotEmpty() && hash !in allowed) {
+            return DialogState.LaunchError(
+                "Invalid Sega CD BIOS: $biosName\nFound MD5: $hash\nExpected MD5: ${allowed.joinToString(" or ")}"
+            )
+        }
+        return null
+    }
+
+    private fun segaCdBiosNameFor(fileName: String): String {
+        val lower = fileName.lowercase()
+        return when {
+            "(japan" in lower || "(jp" in lower || "ntsc-j" in lower -> "bios_CD_J.bin"
+            "(europe" in lower || "(eu" in lower || "(pal" in lower -> "bios_CD_E.bin"
+            else -> "bios_CD_U.bin"
+        }
+    }
+
+    private fun md5Hex(file: File): String? {
+        return try {
+            val digest = MessageDigest.getInstance("MD5")
+            file.inputStream().use { input ->
+                val buffer = ByteArray(64 * 1024)
+                while (true) {
+                    val read = input.read(buffer)
+                    if (read <= 0) break
+                    digest.update(buffer, 0, read)
+                }
+            }
+            digest.digest().joinToString("") { "%02x".format(it) }
+        } catch (_: Throwable) {
+            null
+        }
     }
 
     private fun normalizedRomName(rom: Rom): String {
@@ -525,6 +586,11 @@ class LaunchManager(
     companion object {
         private const val CONFIG_VERSION = 5
         private val DISC_REGEX = Regex("""\s*\((Disc|Disk)\s*\d+\)|\s*\(CD\d+\)""", RegexOption.IGNORE_CASE)
+        private val SEGACD_BIOS_MD5 = mapOf(
+            "bios_cd_e.bin" to setOf("e66fa1dc5820d254611fdcdba0662372"),
+            "bios_cd_u.bin" to setOf("854b9150240a198070150e4566ae1290", "2efd74e3232ff260e371b99f84024f7f"),
+            "bios_cd_j.bin" to setOf("278a9397d192149e84e820ac621a8edd"),
+        )
 
         fun extractBundledCores(context: Context): String {
             val coresDir = File(context.filesDir, "cores")

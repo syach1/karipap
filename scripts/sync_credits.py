@@ -17,7 +17,7 @@ def main():
 
 
 def sync_credits_overlay(credits):
-    path = ROOT / "app/src/main/java/dev/cannoli/scorza/ui/components/CreditsOverlay.kt"
+    path = ROOT / "app/src/main/java/dev/karipap/app/ui/components/CreditsOverlay.kt"
     text = path.read_text(encoding="utf-8")
 
     entries = []

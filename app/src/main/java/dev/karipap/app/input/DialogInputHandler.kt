@@ -777,7 +777,10 @@ class DialogInputHandler @Inject constructor(
                 val selectedIdx = if (override?.appPackage != null) {
                     allOptions.indexOfFirst { it.appPackage == override.appPackage }.coerceAtLeast(0)
                 } else if (override != null) {
-                    allOptions.indexOfFirst { it.coreId == override.coreId && (it.runnerLabel == override.runner || override.runner == null) }
+                    allOptions.indexOfFirst {
+                        it.coreId == override.coreId &&
+                            (override.runner == null || PlatformConfig.normalizeRunnerLabel(it.runnerLabel) == PlatformConfig.normalizeRunnerLabel(override.runner))
+                    }
                         .coerceAtLeast(0)
                 } else {
                     0
@@ -1021,7 +1024,10 @@ class DialogInputHandler @Inject constructor(
                             val match = if (override.appPackage != null) {
                                 options.firstOrNull { it.appPackage == override.appPackage }
                             } else {
-                                options.firstOrNull { it.coreId == override.coreId && (override.runner == null || it.runnerLabel == override.runner) }
+                                options.firstOrNull {
+                                    it.coreId == override.coreId &&
+                                        (override.runner == null || PlatformConfig.normalizeRunnerLabel(it.runnerLabel) == PlatformConfig.normalizeRunnerLabel(override.runner))
+                                }
                             }
                             if (match != null) {
                                 val desc = if (match.appPackage != null) match.displayName
@@ -1322,7 +1328,10 @@ class DialogInputHandler @Inject constructor(
                 val selectedIdx = if (override?.appPackage != null) {
                     allOptions.indexOfFirst { it.appPackage == override.appPackage }.coerceAtLeast(0)
                 } else if (override != null) {
-                    allOptions.indexOfFirst { it.coreId == override.coreId && (it.runnerLabel == override.runner || override.runner == null) }
+                    allOptions.indexOfFirst {
+                        it.coreId == override.coreId &&
+                            (override.runner == null || PlatformConfig.normalizeRunnerLabel(it.runnerLabel) == PlatformConfig.normalizeRunnerLabel(override.runner))
+                    }
                         .coerceAtLeast(0)
                 } else {
                     0

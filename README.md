@@ -60,9 +60,13 @@ Upstream Cannoli:
 - Built-in libretro core options are applied before core init so PCSX-ReARMed can honor BIOS boot-logo settings at startup.
 - PCSX-ReARMed built-in launches default to real BIOS auto-detection with the PlayStation startup logo enabled; SwanStation fast boot is disabled by default.
 - The native core-option cache reflects startup overrides so the in-game menu shows the active values.
+- Built-in Sega CD launches validate the required regional BIOS before starting so a bad BIOS reports an error instead of crashing the frontend.
 - Upstream Cannoli auto-update endpoints are disabled by default so fork builds do not offer upstream APK updates.
 - Added more in-game video scaling options for built-in libretro cores.
 - Added `Show FPS` to in-game shortcut settings and fixed fast-forward FPS reporting.
+- GBA now defaults to bundled gpSP for built-in libretro launches; mGBA remains available as an alternate core where present.
+- Fixed RetroArch/RicottaArch core mapping labels so stale `Unknown` statuses do not fall back to internal libretro.
+- Fixed external RetroArch launches for zipped ROMs by passing the public ROM archive path instead of Karipap's private extraction cache.
 - Added artwork scraping from the selected ROM directory only, with local cover caching.
 - Moved `Refresh Library` to `Settings > Advanced`.
 - Tuned launcher analog-stick menu navigation to reduce accidental double-scrolls.

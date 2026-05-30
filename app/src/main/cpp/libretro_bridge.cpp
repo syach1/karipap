@@ -3,10 +3,16 @@
 #include <string.h>
 #include <stdlib.h>
 #include <stdio.h>
+#include <ctype.h>
+#include <errno.h>
+#include <dirent.h>
+#include <sys/stat.h>
+#include <unistd.h>
 #include <string>
 #include <map>
 #include <vector>
 #include <mutex>
+#include <chrono>
 #include <android/log.h>
 #include <zlib.h>
 #include "libretro.h"
@@ -63,6 +69,18 @@ static JavaVM *g_jvm = nullptr;
 static char g_system_dir[512] = {0};
 static char g_save_dir[512] = {0};
 
+// Content metadata exposed through RETRO_ENVIRONMENT_GET_GAME_INFO_EXT.
+static struct retro_game_info_ext g_game_info_ext = {0};
+static bool g_game_info_ext_valid = false;
+static std::string g_game_full_path;
+static std::string g_game_dir;
+static std::string g_game_name;
+static std::string g_game_ext;
+static bool g_fast_forwarding = false;
+static retro_frame_time_callback_t g_frame_time_callback = nullptr;
+static retro_usec_t g_frame_time_reference = 0;
+static std::chrono::steady_clock::time_point g_last_frame_time;
+
 // Core options
 struct CoreOptionValue {
     std::string value;
@@ -101,6 +119,254 @@ static void update_selected_core_option(const std::string &key, const std::strin
         }
     }
 }
+
+static void clear_game_info_ext() {
+    g_game_info_ext = {0};
+    g_game_info_ext_valid = false;
+    g_game_full_path.clear();
+    g_game_dir.clear();
+    g_game_name.clear();
+    g_game_ext.clear();
+}
+
+static void prepare_game_info_ext(const char *path, const void *data, size_t size, bool need_fullpath) {
+    clear_game_info_ext();
+    if (!path || !path[0]) return;
+
+    g_game_full_path = path;
+    size_t slash = g_game_full_path.find_last_of('/');
+    std::string file_name;
+    if (slash == std::string::npos) {
+        g_game_dir = ".";
+        file_name = g_game_full_path;
+    } else {
+        g_game_dir = g_game_full_path.substr(0, slash);
+        file_name = g_game_full_path.substr(slash + 1);
+    }
+
+    size_t dot = file_name.find_last_of('.');
+    if (dot == std::string::npos || dot == 0) {
+        g_game_name = file_name;
+        g_game_ext.clear();
+    } else {
+        g_game_name = file_name.substr(0, dot);
+        g_game_ext = file_name.substr(dot + 1);
+        for (char &c : g_game_ext) {
+            c = (char)tolower((unsigned char)c);
+        }
+    }
+
+    g_game_info_ext.full_path = g_game_full_path.c_str();
+    g_game_info_ext.archive_path = nullptr;
+    g_game_info_ext.archive_file = nullptr;
+    g_game_info_ext.dir = g_game_dir.c_str();
+    g_game_info_ext.name = g_game_name.c_str();
+    g_game_info_ext.ext = g_game_ext.c_str();
+    g_game_info_ext.meta = nullptr;
+    g_game_info_ext.data = need_fullpath ? nullptr : data;
+    g_game_info_ext.size = need_fullpath ? 0 : size;
+    g_game_info_ext.file_in_archive = false;
+    g_game_info_ext.persistent_data = false;
+    g_game_info_ext_valid = true;
+}
+
+struct retro_vfs_file_handle {
+    FILE *file;
+    std::string path;
+};
+
+struct retro_vfs_dir_handle {
+    DIR *dir;
+    std::string path;
+    struct dirent *entry;
+    bool include_hidden;
+};
+
+static const char *vfs_get_path(struct retro_vfs_file_handle *stream) {
+    return stream ? stream->path.c_str() : nullptr;
+}
+
+static struct retro_vfs_file_handle *vfs_open(const char *path, unsigned mode, unsigned) {
+    if (!path || !path[0]) return nullptr;
+
+    const bool read = (mode & RETRO_VFS_FILE_ACCESS_READ) != 0;
+    const bool write = (mode & RETRO_VFS_FILE_ACCESS_WRITE) != 0;
+    const bool update = (mode & RETRO_VFS_FILE_ACCESS_UPDATE_EXISTING) != 0;
+    const char *fmode = "rb";
+    if (read && write) {
+        fmode = update ? "r+b" : "w+b";
+    } else if (write) {
+        fmode = update ? "r+b" : "wb";
+    }
+
+    FILE *file = fopen(path, fmode);
+    if (!file && write && update) {
+        file = fopen(path, read ? "w+b" : "wb");
+    }
+    if (!file) return nullptr;
+
+    auto *handle = new retro_vfs_file_handle();
+    handle->file = file;
+    handle->path = path;
+    return handle;
+}
+
+static int vfs_close(struct retro_vfs_file_handle *stream) {
+    if (!stream) return -1;
+    int rc = stream->file ? fclose(stream->file) : -1;
+    delete stream;
+    return rc == 0 ? 0 : -1;
+}
+
+static int64_t vfs_tell(struct retro_vfs_file_handle *stream) {
+    if (!stream || !stream->file) return -1;
+    return (int64_t)ftello(stream->file);
+}
+
+static int64_t vfs_seek(struct retro_vfs_file_handle *stream, int64_t offset, int seek_position) {
+    if (!stream || !stream->file) return -1;
+    int whence = SEEK_SET;
+    if (seek_position == RETRO_VFS_SEEK_POSITION_CURRENT) whence = SEEK_CUR;
+    else if (seek_position == RETRO_VFS_SEEK_POSITION_END) whence = SEEK_END;
+    if (fseeko(stream->file, (off_t)offset, whence) != 0) return -1;
+    return vfs_tell(stream);
+}
+
+static int64_t vfs_size(struct retro_vfs_file_handle *stream) {
+    if (!stream || !stream->file) return -1;
+    off_t current = ftello(stream->file);
+    if (current < 0) return -1;
+    if (fseeko(stream->file, 0, SEEK_END) != 0) return -1;
+    off_t end = ftello(stream->file);
+    fseeko(stream->file, current, SEEK_SET);
+    return end < 0 ? -1 : (int64_t)end;
+}
+
+static int64_t vfs_read(struct retro_vfs_file_handle *stream, void *s, uint64_t len) {
+    if (!stream || !stream->file || !s) return -1;
+    size_t read = fread(s, 1, (size_t)len, stream->file);
+    if (read < len && ferror(stream->file)) return -1;
+    return (int64_t)read;
+}
+
+static int64_t vfs_write(struct retro_vfs_file_handle *stream, const void *s, uint64_t len) {
+    if (!stream || !stream->file || !s) return -1;
+    size_t written = fwrite(s, 1, (size_t)len, stream->file);
+    if (written < len && ferror(stream->file)) return -1;
+    return (int64_t)written;
+}
+
+static int vfs_flush(struct retro_vfs_file_handle *stream) {
+    if (!stream || !stream->file) return -1;
+    return fflush(stream->file) == 0 ? 0 : -1;
+}
+
+static int vfs_remove(const char *path) {
+    return (path && unlink(path) == 0) ? 0 : -1;
+}
+
+static int vfs_rename(const char *old_path, const char *new_path) {
+    return (old_path && new_path && rename(old_path, new_path) == 0) ? 0 : -1;
+}
+
+static int64_t vfs_truncate(struct retro_vfs_file_handle *stream, int64_t length) {
+    if (!stream || !stream->file) return -1;
+    return ftruncate(fileno(stream->file), (off_t)length) == 0 ? 0 : -1;
+}
+
+static int vfs_stat_flags(const char *path, int64_t *size) {
+    if (size) *size = 0;
+    if (!path) return 0;
+    struct stat st;
+    if (stat(path, &st) != 0) return 0;
+    if (size) *size = (int64_t)st.st_size;
+    int flags = RETRO_VFS_STAT_IS_VALID;
+    if (S_ISDIR(st.st_mode)) flags |= RETRO_VFS_STAT_IS_DIRECTORY;
+    if (S_ISCHR(st.st_mode)) flags |= RETRO_VFS_STAT_IS_CHARACTER_SPECIAL;
+    return flags;
+}
+
+static int vfs_stat(const char *path, int32_t *size) {
+    int64_t size64 = 0;
+    int flags = vfs_stat_flags(path, &size64);
+    if (size) *size = size64 > INT32_MAX ? INT32_MAX : (int32_t)size64;
+    return flags;
+}
+
+static int vfs_stat_64(const char *path, int64_t *size) {
+    return vfs_stat_flags(path, size);
+}
+
+static int vfs_mkdir(const char *dir) {
+    if (!dir) return -1;
+    if (mkdir(dir, 0777) == 0) return 0;
+    return errno == EEXIST ? -2 : -1;
+}
+
+static struct retro_vfs_dir_handle *vfs_opendir(const char *dir, bool include_hidden) {
+    if (!dir || !dir[0]) return nullptr;
+    DIR *d = opendir(dir);
+    if (!d) return nullptr;
+    auto *handle = new retro_vfs_dir_handle();
+    handle->dir = d;
+    handle->path = dir;
+    handle->entry = nullptr;
+    handle->include_hidden = include_hidden;
+    return handle;
+}
+
+static bool vfs_readdir(struct retro_vfs_dir_handle *dirstream) {
+    if (!dirstream || !dirstream->dir) return false;
+    while ((dirstream->entry = readdir(dirstream->dir)) != nullptr) {
+        if (dirstream->include_hidden || dirstream->entry->d_name[0] != '.') return true;
+    }
+    return false;
+}
+
+static const char *vfs_dirent_get_name(struct retro_vfs_dir_handle *dirstream) {
+    return (dirstream && dirstream->entry) ? dirstream->entry->d_name : nullptr;
+}
+
+static bool vfs_dirent_is_dir(struct retro_vfs_dir_handle *dirstream) {
+    if (!dirstream || !dirstream->entry) return false;
+#ifdef DT_DIR
+    if (dirstream->entry->d_type == DT_DIR) return true;
+    if (dirstream->entry->d_type != DT_UNKNOWN) return false;
+#endif
+    std::string full = dirstream->path + "/" + dirstream->entry->d_name;
+    struct stat st;
+    return stat(full.c_str(), &st) == 0 && S_ISDIR(st.st_mode);
+}
+
+static int vfs_closedir(struct retro_vfs_dir_handle *dirstream) {
+    if (!dirstream) return -1;
+    int rc = dirstream->dir ? closedir(dirstream->dir) : -1;
+    delete dirstream;
+    return rc == 0 ? 0 : -1;
+}
+
+static struct retro_vfs_interface g_vfs_interface = {
+    vfs_get_path,
+    vfs_open,
+    vfs_close,
+    vfs_size,
+    vfs_tell,
+    vfs_seek,
+    vfs_read,
+    vfs_write,
+    vfs_flush,
+    vfs_remove,
+    vfs_rename,
+    vfs_truncate,
+    vfs_stat,
+    vfs_mkdir,
+    vfs_opendir,
+    vfs_readdir,
+    vfs_dirent_get_name,
+    vfs_dirent_is_dir,
+    vfs_closedir,
+    vfs_stat_64
+};
 
 // Disk control
 static struct retro_disk_control_callback g_disk_control = {0};
@@ -191,6 +457,9 @@ static bool environment_cb(unsigned cmd, void *data) {
             *(bool *)data = true;
             return true;
 
+        case RETRO_ENVIRONMENT_SET_PERFORMANCE_LEVEL:
+            return true;
+
         case RETRO_ENVIRONMENT_SET_INPUT_DESCRIPTORS:
             return true;
 
@@ -206,6 +475,17 @@ static bool environment_cb(unsigned cmd, void *data) {
             LOGI("Pixel format set to: %u", g_pixel_format);
             return true;
 
+        case RETRO_ENVIRONMENT_SET_GEOMETRY: {
+            auto *geom = (const struct retro_game_geometry *)data;
+            if (geom) {
+                LOGI("Geometry set: %ux%u max %ux%u aspect %.4f",
+                     geom->base_width, geom->base_height,
+                     geom->max_width, geom->max_height,
+                     geom->aspect_ratio);
+            }
+            return true;
+        }
+
         case RETRO_ENVIRONMENT_GET_SYSTEM_DIRECTORY:
             *(const char **)data = g_system_dir;
             return true;
@@ -219,6 +499,59 @@ static bool environment_cb(unsigned cmd, void *data) {
             cb->log = core_log;
             return true;
         }
+
+        case RETRO_ENVIRONMENT_GET_AUDIO_VIDEO_ENABLE:
+            if (data) {
+                *(unsigned *)data = RETRO_AV_ENABLE_VIDEO | RETRO_AV_ENABLE_AUDIO;
+            }
+            return true;
+
+        case RETRO_ENVIRONMENT_GET_FASTFORWARDING:
+            if (data) {
+                *(bool *)data = g_fast_forwarding;
+            }
+            return true;
+
+        case RETRO_ENVIRONMENT_GET_INPUT_MAX_USERS:
+            if (data) {
+                *(unsigned *)data = MAX_PORTS;
+            }
+            return true;
+
+        case RETRO_ENVIRONMENT_SET_SERIALIZATION_QUIRKS:
+            if (data) {
+                *(uint64_t *)data = 0;
+            }
+            return true;
+
+        case RETRO_ENVIRONMENT_GET_VFS_INTERFACE: {
+            auto *info = (struct retro_vfs_interface_info *)data;
+            if (!info || info->required_interface_version > 4) return false;
+            info->required_interface_version = 4;
+            info->iface = &g_vfs_interface;
+            return true;
+        }
+
+        case RETRO_ENVIRONMENT_GET_LED_INTERFACE:
+        case RETRO_ENVIRONMENT_SET_AUDIO_BUFFER_STATUS_CALLBACK:
+            return false;
+
+        case RETRO_ENVIRONMENT_SET_MINIMUM_AUDIO_LATENCY:
+            return true;
+
+        case RETRO_ENVIRONMENT_GET_DISK_CONTROL_INTERFACE_VERSION:
+            if (data) {
+                *(unsigned *)data = 1;
+            }
+            return true;
+
+        case RETRO_ENVIRONMENT_SET_CORE_OPTIONS_DISPLAY:
+            return true;
+
+        case RETRO_ENVIRONMENT_GET_GAME_INFO_EXT:
+            if (!g_game_info_ext_valid || !data) return false;
+            *(const struct retro_game_info_ext **)data = &g_game_info_ext;
+            return true;
 
         case RETRO_ENVIRONMENT_SET_VARIABLES: {
             g_core_options.clear();
@@ -375,6 +708,26 @@ static bool environment_cb(unsigned cmd, void *data) {
         case RETRO_ENVIRONMENT_SET_SUPPORT_NO_GAME:
             return true;
 
+        case RETRO_ENVIRONMENT_SET_FRAME_TIME_CALLBACK:
+            if (!data) {
+                g_frame_time_callback = nullptr;
+                g_frame_time_reference = 0;
+                g_last_frame_time = {};
+                return true;
+            } else {
+                auto *cb = (const struct retro_frame_time_callback *)data;
+                g_frame_time_callback = cb->callback;
+                g_frame_time_reference = cb->reference;
+                g_last_frame_time = {};
+                LOGI("Frame time callback %s, reference=%lld usec",
+                     g_frame_time_callback ? "set" : "cleared",
+                     (long long)g_frame_time_reference);
+                return true;
+            }
+
+        case RETRO_ENVIRONMENT_SET_AUDIO_CALLBACK:
+            return false;
+
         case RETRO_ENVIRONMENT_SET_DISK_CONTROL_INTERFACE: {
             if (!data) {
                 memset(&g_disk_control, 0, sizeof(g_disk_control));
@@ -390,6 +743,7 @@ static bool environment_cb(unsigned cmd, void *data) {
             return true;
         }
 
+        case RETRO_ENVIRONMENT_SET_DISK_CONTROL_EXT_INTERFACE_CURRENT:
         case RETRO_ENVIRONMENT_SET_DISK_CONTROL_EXT_INTERFACE: {
             if (!data) {
                 memset(&g_disk_control, 0, sizeof(g_disk_control));
@@ -570,6 +924,11 @@ Java_dev_karipap_app_libretro_LibretroRunner_nativeLoadCore(JNIEnv *env, jobject
 
     memset(g_input_state, 0, sizeof(g_input_state));
     memset(g_analog_state, 0, sizeof(g_analog_state));
+    g_fast_forwarding = false;
+    g_frame_time_callback = nullptr;
+    g_frame_time_reference = 0;
+    g_last_frame_time = {};
+    clear_game_info_ext();
 
     {
         std::lock_guard<std::mutex> lock(g_frame_mutex);
@@ -711,7 +1070,9 @@ Java_dev_karipap_app_libretro_LibretroRunner_nativeLoadGame(JNIEnv *env, jobject
     game_info.data = rom_data;
     game_info.size = size;
 
+    prepare_game_info_ext(path, rom_data, (size_t)size, sys_info.need_fullpath);
     bool ok = core.load_game(&game_info);
+    clear_game_info_ext();
     free(rom_data);
     env->ReleaseStringUTFChars(romPath, path);
 
@@ -747,6 +1108,17 @@ extern "C" void ra_process_frame(void);
 
 JNIEXPORT void JNICALL
 Java_dev_karipap_app_libretro_LibretroRunner_nativeRun(JNIEnv *, jobject) {
+    if (g_frame_time_callback) {
+        auto now = std::chrono::steady_clock::now();
+        retro_usec_t usec = g_frame_time_reference > 0 ? g_frame_time_reference : 0;
+        if (g_last_frame_time.time_since_epoch().count() != 0) {
+            auto actual = std::chrono::duration_cast<std::chrono::microseconds>(
+                now - g_last_frame_time).count();
+            if (actual > 0) usec = (retro_usec_t)actual;
+        }
+        g_last_frame_time = now;
+        g_frame_time_callback(usec);
+    }
     core.run();
     ra_process_frame();
 }

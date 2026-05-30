@@ -103,4 +103,10 @@ class PlatformConfigParserTest {
     fun `unknown launchMethod throws`() {
         parse("""{"package":"com.example","launchMethod":"fork"}""")
     }
+
+    @Test fun `retroarch unknown runner label normalizes`() {
+        assertEquals("RetroArch", PlatformConfig.normalizeRunnerLabel("RetroArch (Unknown)"))
+        assertEquals("RicottaArch", PlatformConfig.normalizeRunnerLabel("RicottaArch (Unknown)"))
+        assertEquals("Standalone", PlatformConfig.normalizeRunnerLabel("App"))
+    }
 }

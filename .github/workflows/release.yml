@@ -21,7 +21,7 @@ on:
 env:
   BUILDBOT: https://buildbot.libretro.com/nightly/android/latest
   CORES: >-
-    fbneo gambatte genesis_plus_gx handy mame2003_plus mednafen_ngp
+    fbneo gambatte genesis_plus_gx gpsp handy mame2003_plus mednafen_ngp
     mednafen_pce_fast mednafen_vb mednafen_wswan mgba nestopia pcsx_rearmed
     pokemini prosystem snes9x stella swanstation
 

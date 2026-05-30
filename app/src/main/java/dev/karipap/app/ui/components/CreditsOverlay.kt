@@ -26,6 +26,7 @@ val CREDITS: List<CreditEntry> = listOf(
     CreditEntry("FBNeo", "Non-commercial"),
     CreditEntry("Gambatte", "GPLv2"),
     CreditEntry("Genesis Plus GX", "Non-commercial"),
+    CreditEntry("gpSP", "GPLv2"),
     CreditEntry("Handy", "Zlib"),
     CreditEntry("MAME 2003-Plus", "MAME"),
     CreditEntry("Mednafen NGP", "GPLv2"),

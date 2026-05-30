@@ -113,7 +113,9 @@ class PlatformConfig(
             val cores = json.optJSONObject("cores")
             if (cores != null) for (key in cores.keys()) userCores[key] = cores.getString(key)
             val runners = json.optJSONObject("runners")
-            if (runners != null) for (key in runners.keys()) userRunners[key] = runners.getString(key)
+            if (runners != null) for (key in runners.keys()) {
+                normalizeRunnerLabel(runners.getString(key))?.let { userRunners[key] = it }
+            }
             val apps = json.optJSONObject("apps")
             if (apps != null) for (key in apps.keys()) userApps[key] = apps.getString(key)
             val packages = json.optJSONObject("packages")
@@ -124,7 +126,7 @@ class PlatformConfig(
                     val obj = overrides.getJSONObject(path)
                     gameOverrides[path] = GameCoreOverride(
                         coreId = obj.optString("core", ""),
-                        runner = obj.optString("runner", "").ifEmpty { null },
+                        runner = normalizeRunnerLabel(obj.optString("runner", "").ifEmpty { null }),
                         appPackage = obj.optString("app", "").ifEmpty { null },
                         raPackage = obj.optString("raPackage", "").ifEmpty { null }
                     )
@@ -170,7 +172,7 @@ class PlatformConfig(
         json.put("cores", cores)
         if (userRunners.isNotEmpty()) {
             val runners = JSONObject()
-            for ((tag, runner) in userRunners) runners.put(tag, runner)
+            for ((tag, runner) in userRunners) runners.put(tag, normalizeRunnerLabel(runner))
             json.put("runners", runners)
         }
         if (userApps.isNotEmpty()) {
@@ -191,7 +193,7 @@ class PlatformConfig(
                     obj.put("app", ov.appPackage)
                 } else {
                     obj.put("core", ov.coreId)
-                    if (ov.runner != null) obj.put("runner", ov.runner)
+                    if (ov.runner != null) obj.put("runner", normalizeRunnerLabel(ov.runner))
                     if (ov.raPackage != null) obj.put("raPackage", ov.raPackage)
                 }
                 overrides.put(path, obj)
@@ -214,8 +216,9 @@ class PlatformConfig(
         } else {
             userCores[tag] = core
         }
-        if (runner != null) {
-            userRunners[tag] = runner
+        val normalizedRunner = normalizeRunnerLabel(runner)
+        if (normalizedRunner != null) {
+            userRunners[tag] = normalizedRunner
         } else {
             userRunners.remove(tag)
         }
@@ -229,7 +232,7 @@ class PlatformConfig(
 
     fun getPackage(tag: String): String? = userPackages[tag]
 
-    fun getRunnerPreference(tag: String): String? = userRunners[tag]
+    fun getRunnerPreference(tag: String): String? = normalizeRunnerLabel(userRunners[tag])
 
     fun getGameOverride(gamePath: String): GameCoreOverride? = gameOverrides[gamePath]
 
@@ -239,7 +242,7 @@ class PlatformConfig(
         if (coreId == null) {
             gameOverrides.remove(gamePath)
         } else {
-            gameOverrides[gamePath] = GameCoreOverride(coreId, runner, raPackage = raPackage)
+            gameOverrides[gamePath] = GameCoreOverride(coreId, normalizeRunnerLabel(runner), raPackage = raPackage)
         }
         saveCoreMappings()
     }
@@ -297,7 +300,7 @@ class PlatformConfig(
 
     fun getRunnerLabel(tag: String, coreId: String, installedRaCores: Map<String, Set<String>> = emptyMap()): String {
         if (File(romsTagDir(tag), ".emu_launch").exists()) return "External"
-        val override = userRunners[tag]
+        val override = normalizeRunnerLabel(userRunners[tag])
         if (override == "App") return "Standalone"
         if (override != null) return override
         val pkg = userPackages[tag]
@@ -599,11 +602,24 @@ class PlatformConfig(
         sb.appendLine()
         sb.appendLine("[cores]")
         sb.appendLine("; Optional - overrides bundled TAG->core lookup")
-        sb.appendLine("; GBA = mgba_libretro")
+        sb.appendLine("; GBA = gpsp_libretro")
         file.writeText(sb.toString())
     }
 
     companion object {
+        fun normalizeRunnerLabel(runner: String?): String? {
+            val value = runner?.trim()?.takeIf { it.isNotEmpty() } ?: return null
+            return when {
+                value == "App" -> "Standalone"
+                value.startsWith("RetroArch") || value.startsWith("com.retroarch") -> "RetroArch"
+                value.startsWith("RicottaArch") || value.startsWith("dev.cannoli.ricotta") -> "RicottaArch"
+                else -> value
+            }
+        }
+
+        fun isRetroArchRunner(runner: String?): Boolean =
+            normalizeRunnerLabel(runner) in setOf("RetroArch", "RicottaArch")
+
         fun parseAppConfigForTest(obj: JSONObject): AppConfig = parseAppConfig(obj)
 
         private fun parseAppConfig(obj: JSONObject): AppConfig {

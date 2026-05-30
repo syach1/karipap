@@ -159,7 +159,10 @@ class InputRouter @Inject constructor(
                 val selectedIdx = if ((currentRunner == "App" || currentRunner == "Standalone") && currentApp != null) {
                     options.indexOfFirst { it.appPackage == currentApp }.coerceAtLeast(0)
                 } else {
-                    options.indexOfFirst { it.coreId == currentCore && it.runnerLabel == currentRunner }
+                    options.indexOfFirst {
+                        it.coreId == currentCore &&
+                            PlatformConfig.normalizeRunnerLabel(it.runnerLabel) == PlatformConfig.normalizeRunnerLabel(currentRunner)
+                    }
                         .coerceAtLeast(options.indexOfFirst { it.coreId == currentCore }.coerceAtLeast(0))
                 }
                 nav.push(LauncherScreen.CorePicker(

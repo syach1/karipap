@@ -14,6 +14,7 @@ tasks:
         - fbneo
         - gambatte
         - genesis_plus_gx
+        - gpsp
         - handy
         - mame2003_plus
         - mednafen_ngp

@@ -25,7 +25,7 @@
   },
   "GBA": {
     "name": "Game Boy Advance",
-    "core": "mgba_libretro",
+    "core": "gpsp_libretro",
     "app": [
       { "package": "com.hydra.noods", "extras": [{ "key": "LaunchPath", "kind": "path" }] },
       { "package": "com.sky.SkyEmu", "action": "android.intent.action.VIEW", "data": { "kind": "file_provider" } },
