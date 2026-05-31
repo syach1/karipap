@@ -15,7 +15,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
         with:
-          token: ${{ secrets.PR_CREATE_TOKEN }}
+          token: ${{ github.token }}
 
       - name: Fetch upstream info files
         run: |
@@ -43,7 +43,7 @@ jobs:
         if: steps.diff.outputs.changed == 'true'
         uses: peter-evans/create-pull-request@v7
         with:
-          token: ${{ secrets.PR_CREATE_TOKEN }}
+          token: ${{ github.token }}
           branch: sync/core-info
           commit-message: "chore: sync core info files from libretro-super"
           title: "chore: sync core info files from libretro-super"

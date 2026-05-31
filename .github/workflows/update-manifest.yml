@@ -66,9 +66,9 @@ jobs:
           VERSION_CODE=$(( ${MAJOR:-0} * 1000000 + ${MINOR:-0} * 10000 + ${PATCH:-0} * 100 + PRE ))
 
           APK=$(gh release view "$TAG" --json assets \
-            -q '.assets[] | select(.name | startswith("cannoli-") and endswith(".apk")) | .name')
+            -q '.assets[] | select(.name | startswith("karipap-") and endswith(".apk")) | .name')
           if [[ -z "$APK" ]]; then
-            echo "::error::No cannoli-*.apk asset found in release $TAG"
+            echo "::error::No karipap-*.apk asset found in release $TAG"
             exit 1
           fi
 
@@ -95,7 +95,7 @@ jobs:
              '.[$ch] = {versionName: $vn, versionCode: $vc, tag: $tag, apk: $apk, changelog: ($cl | rtrimstr("\n"))}' \
              _site/versions.json > _site/versions.tmp && mv _site/versions.tmp _site/versions.json
 
-          cp CNAME _site/
+          [[ -f CNAME ]] && cp CNAME _site/
 
           cat _site/versions.json
 
