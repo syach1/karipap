@@ -41,8 +41,12 @@ class RomScanner(
         val storedMtime = readLastScannedMtime(tag)
         val hasCaseDuplicatePaths = hasCaseDuplicatePaths(tag)
         val hasAliasDuplicatePaths = hasAliasDuplicatePaths(tag)
-        if (!hasCaseDuplicatePaths && !hasAliasDuplicatePaths && result.rekeys.isEmpty() && storedMtime != MTIME_UNSET && storedMtime == result.mtime) {
+        val hasStoredRomMismatch = hasStoredRomMismatch(tag, result.roms)
+        if (!hasCaseDuplicatePaths && !hasAliasDuplicatePaths && !hasStoredRomMismatch && result.rekeys.isEmpty() && storedMtime != MTIME_UNSET && storedMtime == result.mtime) {
             return SyncCounts(0, 0, 0)
+        }
+        if (storedMtime != MTIME_UNSET && storedMtime == result.mtime && hasStoredRomMismatch) {
+            ScanLog.write("scanPlatform $tag: mtime unchanged but database differs; resyncing")
         }
         artwork.invalidate(tag)
         walker.invalidateNameMap(result.tagDir)
@@ -74,6 +78,21 @@ class RomScanner(
             val key = PlatformFolderAliases.normalizedPlatformRelativePath(tag, path)
             !seen.add(key)
         }
+    }
+
+    private fun hasStoredRomMismatch(tag: String, scanned: List<RomDirectoryWalker.ScannedRom>): Boolean {
+        val stored = db.queryAll(
+            "SELECT path, display_name, tags, disc_paths FROM roms WHERE platform_tag = ?",
+            tag,
+        ) { stmt ->
+            StoredRomSnapshot(
+                path = stmt.getText(0),
+                displayName = stmt.getText(1),
+                tags = if (stmt.isNull(2)) null else stmt.getText(2),
+                discPaths = if (stmt.isNull(3)) null else stmt.getText(3),
+            )
+        }
+        return storedRomsDifferFromScan(stored, scanned)
     }
 
     private fun applyRekeys(tag: String, rekeys: List<RomDirectoryWalker.RekeyMove>) {
@@ -184,4 +203,27 @@ class RomScanner(
     private companion object {
         const val MTIME_UNSET = 0L
     }
+}
+
+internal data class StoredRomSnapshot(
+    val path: String,
+    val displayName: String,
+    val tags: String?,
+    val discPaths: String?,
+)
+
+internal fun storedRomsDifferFromScan(
+    storedRows: List<StoredRomSnapshot>,
+    scanned: List<RomDirectoryWalker.ScannedRom>,
+): Boolean {
+    val stored = storedRows.associateBy { it.path }
+    if (stored.size != scanned.size) return true
+    for (rom in scanned) {
+        val current = stored[rom.relativePath] ?: return true
+        val discJson = rom.discPaths?.let { JSONArray(it).toString() }
+        if (current.displayName != rom.displayName || current.tags != rom.tags || current.discPaths != discJson) {
+            return true
+        }
+    }
+    return false
 }

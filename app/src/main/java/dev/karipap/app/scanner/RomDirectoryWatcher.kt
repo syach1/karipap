@@ -3,6 +3,7 @@ package dev.karipap.app.scanner
 import android.os.FileObserver
 import dev.karipap.app.config.PlatformConfig
 import dev.karipap.app.db.ScanScheduler
+import dev.karipap.app.util.PlatformFolderAliases
 import dev.karipap.app.util.ScanLog
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -61,9 +62,7 @@ class RomDirectoryWatcher @Inject constructor(
                 val name = path ?: return
                 val child = File(romDir, name)
                 if (!child.isDirectory) return
-                val tag = name.uppercase()
-                if (!platformConfig.isKnownTag(tag)) return
-                if (observers.containsKey(tag)) return
+                val tag = tagForDirectoryName(name) ?: return
                 startPlatformObserver(romDir, tag)
                 scanScheduler.enqueue(tag)
             }
@@ -78,8 +77,17 @@ class RomDirectoryWatcher @Inject constructor(
     }
 
     private fun startPlatformObserver(romDir: File, tag: String) {
-        val dir = File(romDir, tag)
+        val dirs = romDir.listFiles()
+            ?.filter { it.isDirectory && PlatformFolderAliases.matches(tag, it.name) }
+            ?.takeIf { it.isNotEmpty() }
+            ?: listOf(File(romDir, tag))
+        for (dir in dirs) startPlatformObserver(tag, dir)
+    }
+
+    private fun startPlatformObserver(tag: String, dir: File) {
         if (!dir.isDirectory) return
+        val observerKey = "$tag:${dir.absolutePath}"
+        if (observers.containsKey(observerKey)) return
         val obs = object : FileObserver(dir, perPlatformMask) {
             override fun onEvent(event: Int, path: String?) {
                 scheduleScan(tag)
@@ -87,11 +95,16 @@ class RomDirectoryWatcher @Inject constructor(
         }
         try {
             obs.startWatching()
-            observers[tag] = obs
+            observers[observerKey] = obs
         } catch (t: Throwable) {
-            ScanLog.write("RomDirectoryWatcher: startWatching($tag) failed: ${t.message}")
+            ScanLog.write("RomDirectoryWatcher: startWatching($tag:${dir.name}) failed: ${t.message}")
         }
     }
+
+    private fun tagForDirectoryName(name: String): String? =
+        platformConfig.getAllTags()
+            .map { it.uppercase() }
+            .firstOrNull { tag -> PlatformFolderAliases.matches(tag, name) }
 
     private fun scheduleScan(tag: String) {
         debounceJobs[tag]?.cancel()

@@ -113,6 +113,7 @@ class LibretroActivity : ComponentActivity() {
     private var loading by mutableStateOf(true)
     private var revealed by mutableStateOf(false)
     private var missingBios by mutableStateOf<List<dev.karipap.app.config.FirmwareEntry>>(emptyList())
+    private var launchError by mutableStateOf<String?>(null)
 
     private val screenStack = mutableStateListOf<IGMScreen>()
 
@@ -238,6 +239,14 @@ class LibretroActivity : ComponentActivity() {
         )
     }
 
+    @androidx.compose.runtime.Composable
+    private fun LaunchFailureScreen(message: String) {
+        dev.cannoli.ui.components.LaunchErrorDialog(
+            message = message,
+            buttonStyle = dev.cannoli.ui.ButtonStyle(labelSet = buttonLabelSet, confirmButton = confirmButton)
+        )
+    }
+
     private suspend fun maybeReportMissingBios(corePath: String, logs: List<String>): Boolean {
         val problemKeywords = listOf("missing", "not found", "no bios", "no such", "couldn't find", "could not find", "cannot find", "can't find", "required", "failed to load", "failed to open bios", "failed to open firmware", "unable to load", "unable to find")
         val matched = logs.any { line ->
@@ -252,6 +261,46 @@ class LibretroActivity : ComponentActivity() {
             missingBios = entries
         }
         return true
+    }
+
+    private fun arcadeRomsetFailureMessage(corePath: String, logs: List<String>): String? {
+        val coreFile = File(corePath).name.lowercase()
+        val arcadeCore = coreFile.contains("fbneo") || coreFile.contains("fbalpha") || coreFile.contains("mame")
+        if (!arcadeCore) return null
+
+        val matched = logs.any { line ->
+            val lower = line.lowercase()
+            ("this game is known" in lower && "missing files" in lower) ||
+                "none of those archives was found" in lower ||
+                "required files are missing" in lower ||
+                "readroms failed" in lower ||
+                "can't launch this game" in lower ||
+                "romset is unknown" in lower
+        }
+        if (!matched) return null
+
+        val coreLabel = when {
+            coreFile.contains("fbneo") -> "FBNeo v1.0.0.03"
+            coreFile.contains("mame2003") -> "MAME 2003-Plus"
+            coreFile.contains("mame") -> "MAME"
+            else -> File(corePath).nameWithoutExtension
+        }
+        val romName = File(originalRomPath ?: romPath).name
+        val detail = logs.asReversed().firstOrNull { line ->
+            val lower = line.lowercase()
+            "this game is known" in lower ||
+                "none of those archives was found" in lower ||
+                "required files are missing" in lower ||
+                "readroms failed" in lower ||
+                "romset is unknown" in lower
+        }?.removePrefix("[ERROR] ")?.removePrefix("[INFO] ")
+
+        return buildString {
+            append("$romName does not match $coreLabel.")
+            append("\n\nArcade cores require exact romsets for that core version. The ZIP name was found, but the files inside, parent ZIP, or BIOS/device ZIPs do not match what this core expects.")
+            append("\n\nUse a ROM set rebuilt for $coreLabel. Keep BIOS/parent ZIPs like neogeo.zip in the BIOS Directory or beside the arcade set.")
+            if (!detail.isNullOrBlank()) append("\n\nCore detail: $detail")
+        }
     }
 
     private fun builtInStartupCoreOptions(coreId: String): Map<String, String> {
@@ -468,7 +517,10 @@ class LibretroActivity : ComponentActivity() {
                     LocalCannoliColors provides colors,
                     dev.karipap.app.input.screen.compose.LocalScreenInputRegistry provides screenInputRegistry,
                 ) {
-                    if (missingBios.isNotEmpty()) {
+                    val currentLaunchError = launchError
+                    if (currentLaunchError != null) {
+                        LaunchFailureScreen(currentLaunchError)
+                    } else if (missingBios.isNotEmpty()) {
                         MissingBiosScreen(missingBios)
                     } else if (loading) {
                         Box(modifier = Modifier.fillMaxSize().background(Color.Black))
@@ -555,6 +607,7 @@ class LibretroActivity : ComponentActivity() {
 
         onBackPressedDispatcher.addCallback(this, object : OnBackPressedCallback(true) {
             override fun handleOnBackPressed() {
+                if (launchError != null) { finish(); return }
                 if (missingBios.isNotEmpty()) { finish(); return }
                 if (loading) return
                 if (screenStack.isEmpty()) openMenu() else pop()
@@ -608,10 +661,34 @@ class LibretroActivity : ComponentActivity() {
                 sessionLog.logError("loadGame returned null for $romPath")
                 val gameLogs = runner.getCoreLogs()
                 for (line in gameLogs) sessionLog.log("  core: $line")
+                val arcadeError = arcadeRomsetFailureMessage(corePath, gameLogs)
                 val shownBios = maybeReportMissingBios(corePath, gameLogs)
                 sessionLog.close()
                 runner.deinit()
-                if (!shownBios) withContext(kotlinx.coroutines.Dispatchers.Main) { finish() }
+                cleaned = true
+                if (!shownBios) withContext(kotlinx.coroutines.Dispatchers.Main) {
+                    if (arcadeError != null) {
+                        launchError = arcadeError
+                        loading = false
+                    } else {
+                        finish()
+                    }
+                }
+                return@launch
+            }
+            val loadLogs = runner.getCoreLogs()
+            for (line in loadLogs) sessionLog.log("  core: $line")
+            val arcadeError = arcadeRomsetFailureMessage(corePath, loadLogs)
+            if (arcadeError != null) {
+                sessionLog.logError("arcade romset failure detected for $romPath")
+                sessionLog.close()
+                runner.unloadGame()
+                runner.deinit()
+                cleaned = true
+                withContext(kotlinx.coroutines.Dispatchers.Main) {
+                    launchError = arcadeError
+                    loading = false
+                }
                 return@launch
             }
             sessionLog.log("loadGame succeeded: fps=${avInfo.fps} sampleRate=${avInfo.sampleRate}")
@@ -1048,6 +1125,10 @@ class LibretroActivity : ComponentActivity() {
     }
 
     override fun onKeyDown(keyCode: Int, event: KeyEvent): Boolean {
+        if (launchError != null) {
+            if (resolveNavButton(keyCode, event.deviceId) == "btn_east") finish()
+            return true
+        }
         if (missingBios.isNotEmpty()) {
             if (resolveNavButton(keyCode, event.deviceId) == "btn_east") finish()
             return true

@@ -237,6 +237,63 @@ class LaunchManager(
         return rom.path
     }
 
+    private fun prepareArcadeLaunchFile(paths: CannoliPaths, rom: Rom, coreId: String, systemDir: File): File {
+        if (!platformConfig.isArcade(rom.platformTag) || !ArchiveExtractor.isArchive(rom.path)) return rom.path
+
+        val cacheKey = sha256(
+            rom.path.absolutePath.toByteArray(),
+            rom.path.length().toString().toByteArray(),
+            rom.path.lastModified().toString().toByteArray(),
+        ).take(16)
+        val cacheRoot = File(context.cacheDir, "arcade_content/$coreId")
+        val stagingDir = File(cacheRoot, cacheKey)
+        stagingDir.mkdirs()
+        pruneArcadeLaunchCache(cacheRoot, stagingDir)
+
+        val stagedGame = File(stagingDir, rom.path.name)
+        copyFirmware(rom.path, stagedGame)
+        copyArcadeBios(paths, coreId, stagingDir)
+        stagingDir.setLastModified(System.currentTimeMillis())
+        return if (stagedGame.isFile) stagedGame else rom.path
+    }
+
+    private fun copyArcadeBios(paths: CannoliPaths, coreId: String, stagingDir: File) {
+        val sourceDir = paths.biosRoot(settings.biosDirectory)
+        if (!sourceDir.isDirectory) return
+
+        val firmwareNames = coreInfo?.getFirmwareFor(coreId).orEmpty()
+            .map { File(it.path).name.lowercase() }
+        val wantedNames = (firmwareNames + ARCADE_BIOS_NAMES)
+            .filter { it.isNotBlank() }
+            .toSet()
+        if (wantedNames.isEmpty()) return
+
+        try {
+            for (file in sourceDir.walkTopDown()) {
+                if (!file.isFile || file.name.startsWith(".")) continue
+                val name = file.name.lowercase()
+                if (name !in wantedNames) continue
+                copyFirmware(file, File(stagingDir, file.name))
+                if (coreId.startsWith("fbneo")) {
+                    copyFirmware(file, File(stagingDir, "fbneo/${file.name}"))
+                }
+            }
+        } catch (_: Throwable) {
+        }
+    }
+
+    private fun pruneArcadeLaunchCache(cacheRoot: File, keepDir: File) {
+        val dirs = cacheRoot.listFiles()?.filter { it.isDirectory && it != keepDir }
+            ?.sortedByDescending { it.lastModified() }
+            ?: return
+        dirs.drop(8).forEach { dir ->
+            try {
+                dir.deleteRecursively()
+            } catch (_: Throwable) {
+            }
+        }
+    }
+
     fun findEmbeddedCore(coreName: String): String? {
         val soName = "${coreName}_android.so"
         val coreFile = File(context.filesDir, "cores/$soName")
@@ -480,12 +537,15 @@ class LaunchManager(
         val coreId = File(corePath).name.removeSuffix("_android.so")
         val systemDir = prepareLibretroSystemDir(paths, coreId)
         validateEmbeddedFirmware(rom, coreId, systemDir)?.let { return errorAndReset(it) }
+        val launchFile = prepareArcadeLaunchFile(paths, rom, coreId, systemDir)
+        val displayedOriginalPath = originalRomPath
+            ?: rom.path.absolutePath.takeIf { launchFile.absolutePath != rom.path.absolutePath }
 
         val args = LaunchArgs(
             gameTitle = rom.displayName,
             corePath = corePath,
-            romPath = rom.path.absolutePath,
-            originalRomPath = originalRomPath?.takeIf { it != rom.path.absolutePath },
+            romPath = launchFile.absolutePath,
+            originalRomPath = displayedOriginalPath?.takeIf { it != launchFile.absolutePath },
             sramPath = File(saveDir, "$romName.srm").absolutePath,
             statePath = File(stateDir, "$romName.state").absolutePath,
             systemDir = systemDir.absolutePath,
@@ -586,6 +646,21 @@ class LaunchManager(
     companion object {
         private const val CONFIG_VERSION = 5
         private val DISC_REGEX = Regex("""\s*\((Disc|Disk)\s*\d+\)|\s*\(CD\d+\)""", RegexOption.IGNORE_CASE)
+        private val ARCADE_BIOS_NAMES = setOf(
+            "neogeo.zip",
+            "pgm.zip",
+            "skns.zip",
+            "bubsys.zip",
+            "cchip.zip",
+            "decocass.zip",
+            "isgsm.zip",
+            "midssio.zip",
+            "namcoc69.zip",
+            "namcoc70.zip",
+            "namcoc75.zip",
+            "nmk004.zip",
+            "ym2608.zip",
+        )
         private val SEGACD_BIOS_MD5 = mapOf(
             "bios_cd_e.bin" to setOf("e66fa1dc5820d254611fdcdba0662372"),
             "bios_cd_u.bin" to setOf("854b9150240a198070150e4566ae1290", "2efd74e3232ff260e371b99f84024f7f"),

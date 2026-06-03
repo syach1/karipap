@@ -68,6 +68,8 @@ static JavaVM *g_jvm = nullptr;
 // Paths
 static char g_system_dir[512] = {0};
 static char g_save_dir[512] = {0};
+static std::string g_core_path;
+static std::string g_core_name;
 
 // Content metadata exposed through RETRO_ENVIRONMENT_GET_GAME_INFO_EXT.
 static struct retro_game_info_ext g_game_info_ext = {0};
@@ -80,6 +82,70 @@ static bool g_fast_forwarding = false;
 static retro_frame_time_callback_t g_frame_time_callback = nullptr;
 static retro_usec_t g_frame_time_reference = 0;
 static std::chrono::steady_clock::time_point g_last_frame_time;
+
+static std::string lower_ascii(std::string value) {
+    for (char &c : value) c = (char)tolower((unsigned char)c);
+    return value;
+}
+
+static std::string basename_from_path(const char *path) {
+    if (!path || !path[0]) return "";
+    std::string value = path;
+    size_t slash = value.find_last_of('/');
+    return slash == std::string::npos ? value : value.substr(slash + 1);
+}
+
+static std::string extension_from_path(const char *path) {
+    std::string name = basename_from_path(path);
+    size_t dot = name.find_last_of('.');
+    if (dot == std::string::npos || dot == 0) return "";
+    return lower_ascii(name.substr(dot + 1));
+}
+
+static bool path_has_extension(const char *path) {
+    std::string name = basename_from_path(path);
+    size_t dot = name.find_last_of('.');
+    return dot != std::string::npos && dot != 0 && dot + 1 < name.size();
+}
+
+static bool path_exists(const std::string &path, struct stat *out = nullptr) {
+    struct stat st;
+    if (stat(path.c_str(), &st) != 0) return false;
+    if (out) *out = st;
+    return true;
+}
+
+static std::string resolve_archive_vfs_path(const char *path) {
+    if (!path || !path[0]) return "";
+
+    struct stat st;
+    if (path_exists(path, &st)) return path;
+    if (path_has_extension(path)) return path;
+
+    const std::string base = path;
+    static const char *archive_exts[] = {".zip", ".7z", ".ZIP", ".7Z"};
+    for (const char *ext : archive_exts) {
+        std::string candidate = base + ext;
+        if (path_exists(candidate, nullptr)) return candidate;
+    }
+    return path;
+}
+
+static bool should_force_fullpath_for_content(const char *path, const struct retro_system_info &sys_info) {
+    const std::string core_name = lower_ascii(g_core_name);
+    const std::string library_name = lower_ascii(sys_info.library_name ? sys_info.library_name : "");
+    const bool arcade_core =
+        core_name.find("fbneo") != std::string::npos ||
+        core_name.find("fbalpha") != std::string::npos ||
+        core_name.rfind("mame", 0) == 0 ||
+        library_name.find("finalburn") != std::string::npos ||
+        library_name.find("fbneo") != std::string::npos ||
+        library_name.find("mame") != std::string::npos;
+    if (!arcade_core) return false;
+
+    const std::string ext = extension_from_path(path);
+    return ext == "zip" || ext == "7z" || ext == "cue" || ext == "ccd";
+}
 
 // Core options
 struct CoreOptionValue {
@@ -199,15 +265,16 @@ static struct retro_vfs_file_handle *vfs_open(const char *path, unsigned mode, u
         fmode = update ? "r+b" : "wb";
     }
 
-    FILE *file = fopen(path, fmode);
+    const std::string resolved_path = resolve_archive_vfs_path(path);
+    FILE *file = fopen(resolved_path.c_str(), fmode);
     if (!file && write && update) {
-        file = fopen(path, read ? "w+b" : "wb");
+        file = fopen(resolved_path.c_str(), read ? "w+b" : "wb");
     }
     if (!file) return nullptr;
 
     auto *handle = new retro_vfs_file_handle();
     handle->file = file;
-    handle->path = path;
+    handle->path = resolved_path;
     return handle;
 }
 
@@ -229,7 +296,7 @@ static int64_t vfs_seek(struct retro_vfs_file_handle *stream, int64_t offset, in
     if (seek_position == RETRO_VFS_SEEK_POSITION_CURRENT) whence = SEEK_CUR;
     else if (seek_position == RETRO_VFS_SEEK_POSITION_END) whence = SEEK_END;
     if (fseeko(stream->file, (off_t)offset, whence) != 0) return -1;
-    return vfs_tell(stream);
+    return 0;
 }
 
 static int64_t vfs_size(struct retro_vfs_file_handle *stream) {
@@ -278,7 +345,8 @@ static int vfs_stat_flags(const char *path, int64_t *size) {
     if (size) *size = 0;
     if (!path) return 0;
     struct stat st;
-    if (stat(path, &st) != 0) return 0;
+    const std::string resolved_path = resolve_archive_vfs_path(path);
+    if (stat(resolved_path.c_str(), &st) != 0) return 0;
     if (size) *size = (int64_t)st.st_size;
     int flags = RETRO_VFS_STAT_IS_VALID;
     if (S_ISDIR(st.st_mode)) flags |= RETRO_VFS_STAT_IS_DIRECTORY;
@@ -305,11 +373,12 @@ static int vfs_mkdir(const char *dir) {
 
 static struct retro_vfs_dir_handle *vfs_opendir(const char *dir, bool include_hidden) {
     if (!dir || !dir[0]) return nullptr;
-    DIR *d = opendir(dir);
+    const std::string resolved_dir = resolve_archive_vfs_path(dir);
+    DIR *d = opendir(resolved_dir.c_str());
     if (!d) return nullptr;
     auto *handle = new retro_vfs_dir_handle();
     handle->dir = d;
-    handle->path = dir;
+    handle->path = resolved_dir;
     handle->entry = nullptr;
     handle->include_hidden = include_hidden;
     return handle;
@@ -946,6 +1015,8 @@ Java_dev_karipap_app_libretro_LibretroRunner_nativeLoadCore(JNIEnv *env, jobject
     for (int p = 0; p < MAX_PORTS; p++) g_controller_types[p].clear();
 
     const char *path = env->GetStringUTFChars(corePath, nullptr);
+    g_core_path = path ? path : "";
+    g_core_name = basename_from_path(path);
     core.handle = dlopen(path, RTLD_LAZY);
     env->ReleaseStringUTFChars(corePath, path);
 
@@ -1040,11 +1111,17 @@ Java_dev_karipap_app_libretro_LibretroRunner_nativeLoadGame(JNIEnv *env, jobject
 
     struct retro_system_info sys_info = {0};
     core.get_system_info(&sys_info);
+    const bool force_fullpath = should_force_fullpath_for_content(path, sys_info);
+    const bool use_fullpath = sys_info.need_fullpath || force_fullpath;
+    if (force_fullpath && !sys_info.need_fullpath) {
+        LOGI("Forcing fullpath load for arcade content: core=%s library=%s rom=%s",
+             g_core_name.c_str(), sys_info.library_name ? sys_info.library_name : "", path);
+    }
 
     void *rom_data = nullptr;
     long size = 0;
 
-    if (!sys_info.need_fullpath) {
+    if (!use_fullpath) {
         FILE *f = fopen(path, "rb");
         if (!f) {
             LOGE("Failed to open ROM: %s", path);
@@ -1070,7 +1147,7 @@ Java_dev_karipap_app_libretro_LibretroRunner_nativeLoadGame(JNIEnv *env, jobject
     game_info.data = rom_data;
     game_info.size = size;
 
-    prepare_game_info_ext(path, rom_data, (size_t)size, sys_info.need_fullpath);
+    prepare_game_info_ext(path, rom_data, (size_t)size, use_fullpath);
     bool ok = core.load_game(&game_info);
     clear_game_info_ext();
     free(rom_data);
