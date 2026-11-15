@@ -11,6 +11,7 @@ display_version = "GIT"
 # Hardware Information
 manufacturer = "Java"
 systemname = "J2ME"
+systemid = "j2me"
 
 # Libretro Features
 supports_no_game = "false"
@@ -22,6 +23,9 @@ input_descriptors = "true"
 memory_descriptors = "false"
 libretro_saves = "false"
 core_options = "true"
+core_options_version = "2.0"
+hw_render = "false"
+needs_fullpath = "true"
 
 # BIOS / Firmware
 firmware_count = 1
